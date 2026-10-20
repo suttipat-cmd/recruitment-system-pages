@@ -1,3 +1,9 @@
+# รุ่น Pages V4.1.1
+
+เข้าเว็บ: https://suttipat-cmd.github.io/recruitment-system-pages/
+
+เฟสนี้พักการแนบ/เปิดไฟล์ทั้งหมด ข้อความเรื่องเอกสารในคู่มือ V4 ด้านล่างเป็นความสามารถเดิมที่ยังไม่เปิดใน Pages รุ่นนี้
+
 # คู่มือ Recruitment System V4.0.0
 
 ## ภาพรวม
