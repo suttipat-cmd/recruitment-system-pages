@@ -616,3 +616,20 @@ body{font-size:14px}.brand-mark svg{width:25px;height:25px}.topbar h1{font-size:
 .surface{background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 2px 8px #14303409}.shell{transition:padding-left .2s}.shell:has(.sidebar:hover),.shell:has(.sidebar :focus-visible){padding-left:260px}.applicant-list-surface{margin-bottom:24px}.applicant-table tbody tr:last-child td{border-bottom:0}
 @media(max-width:700px){.shell,.shell:has(.sidebar:hover),.shell:has(.sidebar :focus-visible){padding-left:0}}
 .identity-meta>span{display:inline-flex;align-items:center;gap:7px}.identity-meta svg{width:16px;height:16px;flex-shrink:0}
+
+/* V4.8: consistent table numbering, uncluttered settings, resilient spacing. */
+.row-number{width:64px;min-width:64px;text-align:center!important;color:#78909b;font-variant-numeric:tabular-nums;white-space:nowrap}
+.card,.surface,.split>*,.fields>*,.content,.detail-head>*,.topbar>*{min-width:0}
+.card>.table-wrap{margin-top:18px}.table-wrap{max-width:100%;overscroll-behavior-inline:contain}
+.unit-list{gap:10px;align-items:flex-start;margin-bottom:20px}.unit-list .badge{margin:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+.recruitment-status{margin:16px 0 22px}.recruitment-status .badge{display:inline-flex;margin:0}
+.card>button[data-workflow]{margin-top:8px}.actions{align-items:center;row-gap:12px}.card hr{margin:26px 0;border:0;border-top:1px solid var(--line)}
+dialog{overflow-y:auto;overflow-x:hidden;padding:28px;max-height:calc(100dvh - 40px)}
+dialog>h2{padding:0 58px 20px 0;margin:0 0 24px;border-bottom:1px solid var(--line);line-height:1.6;overflow-wrap:anywhere}
+dialog>.close{position:absolute;right:20px;top:20px;float:none;width:42px;height:42px;padding:8px}
+dialog .fields{margin-bottom:18px}dialog label{min-width:0}dialog input,dialog select,dialog textarea{max-width:100%;min-width:0}
+dialog .form-footer{margin-top:24px;padding-top:20px;border-top:1px solid var(--line);justify-content:flex-end}
+dialog .form-footer button{margin-top:0!important}.error:empty{display:none}.hint{overflow-wrap:anywhere}
+.workspace-context{gap:12px;flex-wrap:wrap}.workspace-context>span{overflow-wrap:anywhere}
+@media(max-width:700px){.shell:has(.sidebar:hover),.shell:has(.sidebar :focus-visible){padding-left:0}.card{padding:20px}.unit-list{margin-bottom:18px}.actions>button,.actions>.button{max-width:100%;white-space:normal}dialog{width:calc(100% - 24px);padding:22px 18px;max-height:calc(100dvh - 24px)}dialog>.close{right:14px;top:14px}dialog>h2{font-size:18px;padding-right:48px}dialog .form-footer{gap:10px}dialog .form-footer>button{flex:1}.topbar .actions{width:100%}.row-number{min-width:56px;width:56px}}
+dialog:has(#settings){max-width:520px}#settings>.fields{grid-template-columns:1fr}#settings>.hint{margin:0;color:#78909b}
