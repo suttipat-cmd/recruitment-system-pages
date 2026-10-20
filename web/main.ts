@@ -1,3 +1,4 @@
+import {detailTabs,queueDefinitions,progressState,nextTask,type DetailTab} from "./workspace";
 import {installDatePickers} from "./date-picker";
 import { appAddress, configAddress, attachmentsEnabled } from "./runtime";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -29,6 +30,8 @@ let settings: Row = {};
 let screen = "dashboard";
 let filters = { search: "", status: "", unit: "", offset: 0 };
 let detail: Row | null = null;
+let selectedDetailTab: DetailTab = "general";
+let tabApplicantId = "";
 let recovery = false;
 let generation = 0;
 const is = (...r: Role[]) => !!profile && r.includes(profile.role);
@@ -267,7 +270,7 @@ function shell(body: string) {
     ...(is("ADMIN") ? [["admin", "ตั้งค่าระบบ"]] : []),
   ];
   const navButton = (key:string,label:string) => `<button type="button" data-nav="${key}" title="${label}" aria-label="${label}" ${screen === key ? 'aria-current="page"' : ''} class="${screen === key ? "active" : ""}"><span class="nav-icon" aria-hidden="true">${navIcons[key]}</span><span class="nav-label">${label}</span></button>`;
-  root.innerHTML = `<div class="shell" data-role="${profile.role}"><aside class="sidebar" aria-label="เมนูหลัก"><div class="brand"><span class="brand-mark">R</span><span class="nav-label">Recruitment<small>WORKSPACE · V4.5</small></span></div><button class="mobile-menu" type="button" data-action="toggle-menu" aria-expanded="false" aria-label="เปิดหรือปิดเมนู">☰ เมนู</button><nav>${nav.map(([key,label]) => navButton(key!,label!)).join("")}</nav><div class="bottom"><button type="button" data-action="apply" title="แบบฟอร์มสมัครงาน" aria-label="แบบฟอร์มสมัครงาน"><span class="nav-icon" aria-hidden="true">↗</span><span class="nav-label">แบบฟอร์มสมัครงาน</span></button><div class="profile"><span class="avatar" aria-hidden="true">${esc(profile.display_name.slice(0,1))}</span><span class="nav-label">${esc(profile.display_name)}<small>${roles[profile.role]}</small></span></div><button type="button" data-action="password" title="รหัสผ่าน" aria-label="รหัสผ่าน"><span class="nav-icon" aria-hidden="true">⚿</span><span class="nav-label">รหัสผ่าน</span></button><button type="button" data-action="logout" title="ออกจากระบบ" aria-label="ออกจากระบบ"><span class="nav-icon" aria-hidden="true">⇥</span><span class="nav-label">ออกจากระบบ</span></button></div></aside><main class="content"><div class="workspace-context"><span>${roles[profile.role]} Workspace</span><span>${esc(is("MANAGER") ? profile.all_units ? "ทุกหน่วยงาน · สิทธิ์พิเศษ" : profile.units.join(" · ") : "Recruitment System")}</span></div>${body}</main></div>`;
+  root.innerHTML = `<div class="shell" data-role="${profile.role}"><aside class="sidebar" aria-label="เมนูหลัก"><div class="brand"><span class="brand-mark">R</span><span class="nav-label">Recruitment<small>WORKSPACE · V4.6</small></span></div><button class="mobile-menu" type="button" data-action="toggle-menu" aria-expanded="false" aria-label="เปิดหรือปิดเมนู">☰ เมนู</button><nav>${nav.map(([key,label]) => navButton(key!,label!)).join("")}</nav><div class="bottom"><button type="button" data-action="apply" title="แบบฟอร์มสมัครงาน" aria-label="แบบฟอร์มสมัครงาน"><span class="nav-icon" aria-hidden="true">↗</span><span class="nav-label">แบบฟอร์มสมัครงาน</span></button><div class="profile"><span class="avatar" aria-hidden="true">${esc(profile.display_name.slice(0,1))}</span><span class="nav-label">${esc(profile.display_name)}<small>${roles[profile.role]}</small></span></div><button type="button" data-action="password" title="รหัสผ่าน" aria-label="รหัสผ่าน"><span class="nav-icon" aria-hidden="true">⚿</span><span class="nav-label">รหัสผ่าน</span></button><button type="button" data-action="logout" title="ออกจากระบบ" aria-label="ออกจากระบบ"><span class="nav-icon" aria-hidden="true">⇥</span><span class="nav-label">ออกจากระบบ</span></button></div></aside><main class="content"><div class="workspace-context"><span>${roles[profile.role]} Workspace</span><span>${esc(is("MANAGER") ? profile.all_units ? "ทุกหน่วยงาน · สิทธิ์พิเศษ" : profile.units.join(" · ") : "Recruitment System")}</span></div>${body}</main></div>`;
   compactForms();
 }
 function head(title: string, sub: string, actions = "") {
@@ -297,18 +300,24 @@ async function render() {
 async function dashboard() {
   const d = await rpc("dashboard", { unit: filters.unit });
   const c = d.counts, k = d.kpi14, r = d.retention;
+  const definitions = queueDefinitions(profile.role);
+  const queues = await Promise.all(definitions.map(async q => {
+    try {if(!c[q.status])return {...q,rows:[],total:0,error:false};const list=await rpc("applicants",{status:q.status,offset:0,search:"",unit:""});return {...q,...list,error:false};}
+    catch {return {...q,rows:[],total:0,error:true};}
+  }));
+  const queueHtml = `<section class="task-board"><div class="section-heading"><div><p class="section-label">TODAY · ${roles[profile.role]}</p><h2>งานที่ต้องทำ</h2></div><span class="muted">เลือกชื่อเพื่อเปิดขั้นตอนที่เกี่ยวข้อง</span></div><div class="task-grid">${queues.filter(q=>q.total>0||q.error).map(q=>`<section class="card task-card"><div class="section-heading"><h3>${q.title}</h3><span class="task-count">${q.error?'—':q.total}</span></div><p class="hint">${q.hint}</p>${q.error?'<p class="error">โหลดรายการไม่สำเร็จ กรุณากดรีเฟรช</p>':q.rows.slice(0,5).map((a:Applicant)=>`<button class="task-row" data-open="${a.id}" data-open-tab="${q.tab}"><span><b>${esc(a.full_name)}</b><small>${esc(a.hiring_unit)} · ${position(a.position)}</small></span><span>${is("COACH") ? (a.coach_id===profile.id ? '<span class="badge">งานของฉัน</span>' : '<small>ดูข้อมูล</small>') : is("MANAGER")&&q.status==='INTERVIEW' ? (a.owner_id===profile.id ? '<span class="badge">งานของฉัน</span>' : a.owner_id ? '<small>มีผู้รับงานแล้ว</small>' : '<span class="badge warn">คิวร่วม</span>') : '→'}</span></button>`).join('')}<button class="queue-more" data-filter="${q.status}">ดูรายการทั้งหมด →</button></section>`).join('')}</div>${queues.every(q=>!q.error&&!q.total)?'<section class="card empty"><h3>ไม่มีงานในกลุ่มนี้ขณะนี้</h3><p>ค้นหารายการหรือเริ่มงานใหม่จากเมนูด้านข้างได้</p></section>':''}<details class="zero-queues"><summary>กลุ่มงานที่ไม่มีรายการ (${queues.filter(q=>!q.error&&!q.total).length})</summary>${queues.filter(q=>!q.error&&!q.total).map(q=>`<p>${q.title} · 0</p>`).join('')}</details></section>`;
   const work = {
     ADMIN:{title:"ศูนย์ดูแลระบบ",sub:"จัดการผู้ใช้งาน สิทธิ์ และการตั้งค่า ให้ทีมพร้อมทำงาน",label:"SYSTEM ADMINISTRATION",action:button("จัดการผู้ใช้และตั้งค่า", "admin-workspace", "primary")},
     HR:{title:"งานสรรหาของคุณ",sub:"ตรวจใบสมัคร ส่งสัมภาษณ์ และติดตามวันเริ่มงานในที่เดียว",label:"RECRUITMENT OPERATIONS",action:button("+ เพิ่มผู้สมัคร","new-applicant","primary")},
     MANAGER:{title:"งานของหน่วยงาน",sub:"แจ้งขอคน รับงานสัมภาษณ์ และส่งมอบพนักงานให้ผู้ดูแล",label:"SUPERVISOR WORKSPACE",action:button("+ แจ้งขอคน","new-request","primary")},
     COACH:{title:"งานดูแลพนักงานของคุณ",sub:"ตรวจรายชื่อพนักงาน และบันทึกผลทดลองขับเฉพาะคนที่ได้รับมอบหมาย",label:"DRIVER COACH WORKSPACE",action:button("เปิดรายชื่อพนักงาน","coach-workspace","primary")}
   }[profile.role];
-  const stats = is("COACH") ? [["รอเริ่มงาน",c.HIRED||0,"HIRED"],["เริ่มงานแล้ว",c.STARTED||0,"STARTED"]] : is("MANAGER") ? [["รอสัมภาษณ์",c.INTERVIEW||0,"INTERVIEW"],["รอเริ่มงาน",c.HIRED||0,"HIRED"],["เริ่มงานแล้ว",c.STARTED||0,"STARTED"]] : [["รอ HR ตรวจ",(c.HR_REVIEW||0)+(c.WAITING_INFO||0),"HR_REVIEW"],["รอสัมภาษณ์",c.INTERVIEW||0,"INTERVIEW"],["รอเริ่มงาน",c.HIRED||0,"HIRED"],["เริ่มงานแล้ว",c.STARTED||0,"STARTED"]];
-  return head(work.title,work.sub,work.action) + `<section class="workspace-hero"><div><p class="section-label">${work.label}</p><h2>สวัสดี ${esc(profile.display_name)}</h2><p>${is("COACH") ? "เลือกพนักงาน → ตรวจข้อมูล → บันทึกผลทดลองขับ" : is("MANAGER") ? "รับงานสัมภาษณ์ → ยืนยันผล → ส่งมอบและติดตามอบรม" : is("HR") ? "คัดกรอง → ส่งสัมภาษณ์ → กำหนดเริ่มงาน → ติดตามพนักงาน" : "ดูแลสิทธิ์ผู้ใช้ → ตั้งค่าการรับสมัคร → ตรวจประวัติระบบ"}</p></div><span class="role-pill">${roles[profile.role]}</span></section>` +
-  `${is("ADMIN","HR") ? '<section class="card hr-pin-card" id="hr-application-pin" aria-live="polite">กำลังโหลด PIN สำหรับผู้สมัคร…</section>' : ''}<div class="grid role-stats">${stats.map(([label,n,status])=>`<section class="card stat"><small>${label}</small><strong>${n}</strong><button data-filter="${status}">เปิดรายการ →</button></section>`).join("")}</div>` +
+  const stats = is("COACH") ? [["รอเริ่มงาน",c.HIRED||0,"HIRED"],["เริ่มงานแล้ว",c.STARTED||0,"STARTED"]] : is("MANAGER") ? [["รอสัมภาษณ์",c.INTERVIEW||0,"INTERVIEW"],["รอเริ่มงาน",c.HIRED||0,"HIRED"],["เริ่มงานแล้ว",c.STARTED||0,"STARTED"]] : [["รอ HR ตรวจ",c.HR_REVIEW||0,"HR_REVIEW"],["รอสัมภาษณ์",c.INTERVIEW||0,"INTERVIEW"],["รอเริ่มงาน",c.HIRED||0,"HIRED"],["เริ่มงานแล้ว",c.STARTED||0,"STARTED"]];
+  return head(work.title,work.sub,work.action) +
+  `${is("ADMIN","HR") ? '<section class="card hr-pin-card" id="hr-application-pin" aria-live="polite">กำลังโหลด PIN สำหรับผู้สมัคร…</section>' : ''}${queueHtml}<details class="metrics-fold"><summary>ภาพรวมและตัวชี้วัด</summary><div class="metrics-body"><div class="grid role-stats">${stats.map(([label,n,status])=>`<section class="card stat"><small>${label}</small><strong>${n}</strong><button data-filter="${status}">เปิดรายการ →</button></section>`).join("")}</div>` +
   `${is("ADMIN") ? `<section class="card"><h2>เครื่องมือผู้ดูแลระบบ</h2><p class="muted">จัดการบัญชี บทบาท หน่วยงาน ลิงก์หลังบ้าน และตรวจสอบประวัติ</p>${button("เปิดการตั้งค่าระบบ","admin-workspace")}</section>` : ''}` +
   `${is("HR","MANAGER") ? `<div class="split"><section class="card"><div class="section-heading"><h2>จัดหาคนขับภายใน 14 วัน</h2>${button("ดูคำขอคน","requests")}</div><div class="grid">${[["อัตราคนขับ",k.total],["รับผ่านแล้ว",k.filled],["ทัน 14 วัน",k.on_time],["ยังไม่ครบ / เกินกำหนด",k.overdue]].map(([label,n])=>`<div class="stat"><small>${label}</small><strong>${n}</strong></div>`).join('')}</div><p class="hint">เริ่มเมื่อ HR รับเรื่อง จบเมื่อ Supervisor ยืนยันผ่าน</p></section><section class="card"><h2>ผู้เริ่มงานใน 90 วันล่าสุด</h2><strong class="metric-value">${r.rate === null ? "—" : r.rate+"%"}</strong><div class="progress"><i style="width:${Math.min(100,r.rate||0)}%"></i></div><p>ยังทำงาน ${r.active} / เริ่มงาน ${r.total} คน · เป้าหมาย 90%</p><small>นับวันเริ่มงานจริง ${date(retention([],today()).from)} – ${date(today())}</small></section></div>${button("ดูผู้สมัครสำรอง","reserves")}` : ''}` +
-  `${is("COACH") ? `<section class="card"><h2>ขั้นตอนบันทึกผลทดลองขับ</h2><div class="flow"><span>1. เลือกพนักงาน</span>→<span>2. เปิดผลทดลองขับ</span>→<span>3. ระบุผลและวันที่</span></div><p class="muted">บันทึกได้เฉพาะพนักงานที่ได้รับมอบหมายให้คุณดูแล</p>${button("ดูรายชื่อพนักงาน","coach-workspace")}</section>` : ''}`;
+  `${is("COACH") ? `<section class="card"><h2>ขั้นตอนบันทึกผลทดลองขับ</h2><div class="flow"><span>1. เลือกพนักงาน</span>→<span>2. เปิดผลทดลองขับ</span>→<span>3. ระบุผลและวันที่</span></div><p class="muted">บันทึกได้เฉพาะพนักงานที่ได้รับมอบหมายให้คุณดูแล</p>${button("ดูรายชื่อพนักงาน","coach-workspace")}</section>` : ''}</div></details>`;
 }
 async function applicantList() {
   const training = screen === "training";
@@ -339,7 +348,7 @@ async function applicantList() {
             ),
           )
         : ""
-    }<button type="submit">ค้นหา</button></form><div class="table-wrap"><table><thead><tr><th>ชื่อผู้สมัคร</th><th>ตำแหน่ง / หน่วยงาน</th><th>สถานะ</th><th>วันที่สมัคร</th><th>${is("COACH") ? "Driver Coach / งานที่รับผิดชอบ" : "ผู้สัมภาษณ์"}</th><th></th></tr></thead><tbody>${list.rows.map((a: Applicant) => `<tr><td><b>${esc(a.full_name)}</b><br><small>${esc(a.phone)}</small></td><td>${position(a.position)}<br><small>${esc(a.hiring_unit)}</small></td><td>${badge(a.status)}</td><td>${date(a.created_at)}</td><td>${is("COACH") ? `${esc(person(a.coach_id))}${a.coach_id === profile.id ? '<br><span class="badge">งานของฉัน</span>' : '<br><small>ดูข้อมูล</small>'}` : esc(person(a.owner_id))}</td><td><button data-open="${a.id}">เปิดรายการ →</button></td></tr>`).join("")}</tbody></table>${!list.rows.length ? '<div class="empty">ยังไม่มีรายการในเงื่อนไขนี้</div>' : ""}</div><div class="pagination"><small>ทั้งหมด ${list.total} รายการ · หน้า ${Math.floor(filters.offset / 30) + 1}</small><div class="actions"><button data-page="-1" ${filters.offset === 0 ? "disabled" : ""}>ก่อนหน้า</button><button data-page="1" ${filters.offset + 30 >= list.total ? "disabled" : ""}>ถัดไป</button></div></div></section>`
+    }<button type="submit">ค้นหา</button></form><div class="applicant-mobile">${list.rows.map((a:Applicant)=>`<article class="mobile-record"><div class="section-heading"><b>${esc(a.full_name)}</b>${badge(a.status)}</div><p>${position(a.position)} · ${esc(a.hiring_unit)}</p><div class="record-meta"><span>สมัคร ${date(a.created_at)}</span>${is("COACH")&&a.coach_id===profile.id?'<span class="badge">งานของฉัน</span>':`<span>${esc(person(is("COACH")?a.coach_id:a.owner_id))}</span>`}</div><button data-open="${a.id}" ${training?'data-open-tab="training"':''}>เปิดรายการ →</button></article>`).join('')}${!list.rows.length?'<div class="empty">ยังไม่มีรายการในเงื่อนไขนี้</div>':''}</div><div class="table-wrap applicant-desktop"><table><thead><tr><th>ชื่อผู้สมัคร</th><th>ตำแหน่ง / หน่วยงาน</th><th>สถานะ</th><th>วันที่สมัคร</th><th>${is("COACH") ? "Driver Coach / งานที่รับผิดชอบ" : "ผู้สัมภาษณ์"}</th><th></th></tr></thead><tbody>${list.rows.map((a: Applicant) => `<tr><td><b>${esc(a.full_name)}</b><br><small>${esc(a.phone)}</small></td><td>${position(a.position)}<br><small>${esc(a.hiring_unit)}</small></td><td>${badge(a.status)}</td><td>${date(a.created_at)}</td><td>${is("COACH") ? `${esc(person(a.coach_id))}${a.coach_id === profile.id ? '<br><span class="badge">งานของฉัน</span>' : '<br><small>ดูข้อมูล</small>'}` : esc(person(a.owner_id))}</td><td><button data-open="${a.id}" ${training?'data-open-tab="training"':''}>เปิดรายการ →</button></td></tr>`).join("")}</tbody></table>${!list.rows.length ? '<div class="empty">ยังไม่มีรายการในเงื่อนไขนี้</div>' : ""}</div><div class="pagination"><small>ทั้งหมด ${list.total} รายการ · หน้า ${Math.floor(filters.offset / 30) + 1}</small><div class="actions"><button data-page="-1" ${filters.offset === 0 ? "disabled" : ""}>ก่อนหน้า</button><button data-page="1" ${filters.offset + 30 >= list.total ? "disabled" : ""}>ถัดไป</button></div></div></section>`
   );
 }
 function profileFields(a?: Applicant) {
@@ -473,11 +482,15 @@ setInterval(() => {
     void refreshApplicationPin();
   }
 },1000);
-async function openApplicant(id: string) {
+async function openApplicant(id: string, requestedTab?: DetailTab) {
+  const opening = !detail || detail.applicant.id !== id;
   const token = ++generation;
   const d = await rpc("detail", { id });
   if (token !== generation) return;
   detail = d;
+  if (tabApplicantId !== id) selectedDetailTab = "general";
+  tabApplicantId = id;
+  if (requestedTab) selectedDetailTab = requestedTab;
   const a = d.applicant as Applicant;
   const manage = is("ADMIN", "HR");
   const ownManager = is("MANAGER") && (profile.all_units || profile.units.includes(a.hiring_unit));
@@ -528,16 +541,16 @@ async function openApplicant(id: string) {
     head(
       a.full_name,
       `${position(a.position)} · ${a.hiring_unit}`,
-      button("← กลับรายการ", "back"),
+      button(screen === "dashboard" ? "← กลับงานที่ต้องทำ" : "← กลับรายการ", "back"),
     ) +
     `<section class="card"><div class="detail-head"><div>${badge(a.status)}<p class="muted" style="margin-top:10px">สมัคร ${date(a.created_at)} · รอบสัมภาษณ์ ${a.round + 1}</p></div><div class="actions">${actions}</div></div><div class="keyvals"><div><small>หน่วยงานที่สมัครเดิม</small>${esc(a.original_unit)}</div><div><small>เบอร์โทร</small>${esc(a.phone)}</div><div><small>ผู้สัมภาษณ์</small>${esc(person(a.owner_id))}</div><div><small>คำขอที่ผูก</small>${a.slot_id ? "ผูกคำขอแล้ว" : "ยังไม่ผูก — ดำเนินการรับสมัครได้ตามปกติ"}</div></div>${manage ? `<div class="actions" style="margin-top:18px">${button("ผูก / ปลดคำขอคน", "match")}</div>` : ""}</section>`;
-  if (d.duplicates.length)
+  if (d.duplicates.length && manage && ["HR_REVIEW","WAITING_INFO","INTERVIEW"].includes(a.status))
     body += `<div class="notice warn">พบใบสมัครที่อาจซ้ำ ${d.duplicates.map((x: Row) => esc(x.full_name) + " (" + esc(statuses[x.status]) + ")").join(", ")} กรุณาตรวจสอบและบันทึกเหตุผลก่อนส่งสัมภาษณ์</div>`;
   body += `<div class="split"><div>${
     manage &&
     ["HR_REVIEW", "WAITING_INFO", "INTERVIEW"].includes(a.status) &&
     !a.owner_id
-      ? `<section class="card"><h2>ขั้นตอนถัดไป: HR คัดกรอง</h2><form id="screen"><div class="fields">${select(
+      ? `<section class="card" data-detail-group="general"><h2>${a.status === "INTERVIEW" ? "ผลคัดกรอง / แก้ไขก่อนมีผู้รับงาน" : "HR คัดกรอง"}</h2><form id="screen"><div class="fields">${select(
           "result",
           "ผลคัดกรอง",
           opts(
@@ -553,7 +566,7 @@ async function openApplicant(id: string) {
       : ""
   }`;
   if (a.status === "INTERVIEW")
-    body += `<section class="card"><h2>สัมภาษณ์และรับเข้าทำงาน</h2>${ownManager && !a.owner_id ? button("รับงานสัมภาษณ์", "claim", "primary") : ""}${(owner || manage) && a.owner_id ? button("คืนงานสัมภาษณ์", "release-interview") : ""}${
+    body += `<section class="card" data-detail-group="interview"><h2>สัมภาษณ์และรับเข้าทำงาน</h2>${ownManager && !a.owner_id ? button("รับงานสัมภาษณ์", "claim", "primary") : ""}${(owner || manage) && a.owner_id ? button("คืนงานสัมภาษณ์", "release-interview") : ""}${
       owner
         ? `<form id="interview" style="margin-top:20px"><div class="fields">${select(
             "score",
@@ -582,12 +595,12 @@ async function openApplicant(id: string) {
     }</section>`;
   const handoverComplete = !!(a.coach_id && a.supervisor_id && a.data.plate && a.data.fleet_type);
   if (canHandover)
-    body += `<section class="card"><h2>ส่งมอบพนักงาน</h2><p class="${handoverComplete ? "muted" : "notice warn"}">${handoverComplete ? "บันทึกผู้ดูแลแล้ว" : "กรอกข้อมูลส่งมอบให้ครบก่อนให้ HR กำหนดเริ่มงาน"}</p><form id="handover"><div class="fields">${select("coach_id", "Driver Coach", peopleOpts("COACH", a.coach_id),true)}${select("supervisor_id", "Supervisor ผู้ดูแล", peopleOpts("MANAGER", a.supervisor_id, a.hiring_unit),true)}${field("plate", "ทะเบียนรถ", a.data.plate,true)}${select("fleet_type","ประเภทรถ",opts([{value:"COMPANY",label:"รถบริษัท"},{value:"PARTNER",label:"รถร่วม"}],a.data.fleet_type),true)}${note()}</div><button type="submit" class="primary">บันทึกผู้ดูแล</button><p class="error" data-error></p></form></section>`;
+    body += `<section class="card" data-detail-group="employment"><h2>ส่งมอบพนักงาน</h2><p class="${handoverComplete ? "muted" : "notice warn"}">${handoverComplete ? "บันทึกผู้ดูแลแล้ว" : "กรอกข้อมูลส่งมอบให้ครบก่อนให้ HR กำหนดเริ่มงาน"}</p><form id="handover"><div class="fields">${select("coach_id", "Driver Coach", peopleOpts("COACH", a.coach_id),true)}${select("supervisor_id", "Supervisor ผู้ดูแล", peopleOpts("MANAGER", a.supervisor_id, a.hiring_unit),true)}${field("plate", "ทะเบียนรถ", a.data.plate,true)}${select("fleet_type","ประเภทรถ",opts([{value:"COMPANY",label:"รถบริษัท"},{value:"PARTNER",label:"รถร่วม"}],a.data.fleet_type),true)}${note()}</div><button type="submit" class="primary">บันทึกผู้ดูแล</button><p class="error" data-error></p></form></section>`;
   if (hired && a.position === "DRIVER") {
-    body += `<section class="card"><h2>ผลทดลองขับโดย Driver Coach</h2><p class="muted">แยกจากผลสัมภาษณ์ บันทึกโดย Driver Coach ที่ได้รับมอบหมาย</p>${a.data.road_test_result ? `<p><b>${a.data.road_test_result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</b> · ${date(a.data.road_test_date)} · ${esc(person(a.data.road_test_by))}</p><p>${esc(a.data.road_test_note)}</p>` : '<p class="muted">ยังไม่ได้บันทึกผลทดลองขับ</p>'}${is("COACH") && a.coach_id === profile.id ? `<form id="road-test"><div class="fields">${select("result","ผลทดลองขับ",opts([{value:"PASS",label:"ผ่าน"},{value:"FAIL",label:"ไม่ผ่าน"}],a.data.road_test_result),true)}${dates("test_date","วันที่ทดลองขับ",a.data.road_test_date || today(),true)}${note(a.data.road_test_note)}</div><button class="primary" type="submit">บันทึกผลทดลองขับ</button><p class="error" data-error></p></form>` : ""}</section>`;
+    body += `<section class="card" data-detail-group="road"><h2>ผลทดลองขับโดย Driver Coach</h2><p class="muted">แยกจากผลสัมภาษณ์ บันทึกโดย Driver Coach ที่ได้รับมอบหมาย</p>${a.data.road_test_result ? `<p><b>${a.data.road_test_result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</b> · ${date(a.data.road_test_date)} · ${esc(person(a.data.road_test_by))}</p><p>${esc(a.data.road_test_note)}</p>` : '<p class="muted">ยังไม่ได้บันทึกผลทดลองขับ</p>'}${is("COACH") && a.coach_id === profile.id ? `<form id="road-test"><div class="fields">${select("result","ผลทดลองขับ",opts([{value:"PASS",label:"ผ่าน"},{value:"FAIL",label:"ไม่ผ่าน"}],a.data.road_test_result),true)}${dates("test_date","วันที่ทดลองขับ",a.data.road_test_date || today(),true)}${note(a.data.road_test_note)}</div><button class="primary" type="submit">บันทึกผลทดลองขับ</button><p class="error" data-error></p></form>` : ""}</section>`;
   }
   if (hired) {
-    body += `<section class="card"><h2>เริ่มงาน / สถานะพนักงาน</h2>${is("HR") ? `${!handoverComplete ? '<p class="notice warn">บันทึกส่งมอบพนักงานให้ครบก่อน</p>' : !a.scheduled_start_date ? '<p class="notice">บันทึกกำหนดเริ่มงานก่อน แล้วจึงกรอกวันเริ่มงานจริงได้</p>' : ''}<form id="employment"><fieldset class="workflow-fields" ${handoverComplete ? "" : "disabled"}><div class="fields">${dates("scheduled_start_date","กำหนดเริ่มงาน",a.scheduled_start_date,true)}${dates("actual_start_date","วันเริ่มงานจริง",a.actual_start_date).replace('data-date',`data-date ${a.scheduled_start_date || a.actual_start_date ? '' : 'disabled'}`)}${dates("resignation_date","วันลาออก",a.resignation_date).replace('data-date',`data-date ${a.actual_start_date ? '' : 'disabled'}`)}${note("",false,"หมายเหตุ (บังคับเมื่อลาออก)")}</div><div class="actions"><button type="submit" class="primary">บันทึกการทำงาน</button>${a.status === "HIRED" && a.scheduled_start_date && !a.actual_start_date ? `<button type="button" class="danger" data-action="no-show" ${a.scheduled_start_date > today() ? 'disabled title="บันทึกได้เมื่อถึงกำหนดเริ่มงาน"' : ''}>ไม่มาเริ่มงาน</button>` : ''}</div></fieldset><p class="error" data-error></p></form>` : `<p class="muted">ส่วนนี้บันทึกได้เฉพาะ HR</p><div class="keyvals"><div><small>กำหนดเริ่มงาน</small>${date(a.scheduled_start_date)}</div><div><small>วันเริ่มงานจริง</small>${date(a.actual_start_date)}</div></div>`}</section>`;
+    body += `<section class="card" data-detail-group="employment"><h2>เริ่มงาน / สถานะพนักงาน</h2>${is("HR") ? `${!handoverComplete ? '<p class="notice warn">บันทึกส่งมอบพนักงานให้ครบก่อน</p>' : !a.scheduled_start_date ? '<p class="notice">บันทึกกำหนดเริ่มงานก่อน แล้วจึงกรอกวันเริ่มงานจริงได้</p>' : ''}<form id="employment"><fieldset class="workflow-fields" ${handoverComplete ? "" : "disabled"}><div class="fields">${dates("scheduled_start_date","กำหนดเริ่มงาน",a.scheduled_start_date,true)}${dates("actual_start_date","วันเริ่มงานจริง",a.actual_start_date).replace('data-date',`data-date ${a.scheduled_start_date || a.actual_start_date ? '' : 'disabled'}`)}${dates("resignation_date","วันลาออก",a.resignation_date).replace('data-date',`data-date ${a.actual_start_date ? '' : 'disabled'}`)}${note("",false,"หมายเหตุ (บังคับเมื่อลาออก)")}</div><div class="actions"><button type="submit" class="primary">บันทึกการทำงาน</button>${a.status === "HIRED" && a.scheduled_start_date && !a.actual_start_date ? `<button type="button" class="danger" data-action="no-show" ${a.scheduled_start_date > today() ? 'disabled title="บันทึกได้เมื่อถึงกำหนดเริ่มงาน"' : ''}>ไม่มาเริ่มงาน</button>` : ''}</div></fieldset><p class="error" data-error></p></form>` : `<p class="muted">ส่วนนี้บันทึกได้เฉพาะ HR</p><div class="keyvals"><div><small>กำหนดเริ่มงาน</small>${date(a.scheduled_start_date)}</div><div><small>วันเริ่มงานจริง</small>${date(a.actual_start_date)}</div></div>`}</section>`;
   }
   if (a.status === "STARTED") {
     const allowed = topics.filter(
@@ -596,7 +609,7 @@ async function openApplicant(id: string) {
         (!t.position || t.position === a.position) &&
         Object.hasOwn(categories,t.category) && canTrain(profile.role, profile.units, a, profile.id, t.category, !!profile.all_units),
     );
-    body += `<section class="card"><h2>การอบรม</h2>${
+    body += `<section class="card" data-detail-group="training"><h2>การอบรม</h2>${
       allowed.length
         ? `<form id="training"><div class="fields">${select("topic_id", "หัวข้อ", opts(allowed.map((t) => ({ value: t.id, label: categories[t.category] + " · " + t.title }))), true)}${dates("training_date", "วันที่อบรม", today(), true)}${select(
             "result",
@@ -610,7 +623,7 @@ async function openApplicant(id: string) {
         : `<p class="muted">${is("HR","MANAGER") ? "ยังไม่มีหัวข้อประเภทใหม่ที่ตรงกับพนักงานนี้ กรุณาเพิ่มหัวข้ออบรม" : "บันทึกอบรมได้เฉพาะ HR และ Supervisor ในหน่วยงาน"}</p>`
     }${is("HR","MANAGER") ? button("+ เพิ่มหัวข้ออบรม", "new-topic") : ""}<div class="table-wrap"><table><thead><tr><th>หัวข้อ</th><th>วันที่</th><th>ผล</th><th></th></tr></thead><tbody>${d.training.map((tr: Row) => `<tr><td>${esc(tr.title)}<br><small>${categories[tr.category] || "ประเภทเดิม"} · ${esc(tr.note)}</small></td><td>${date(tr.training_date)}</td><td>${tr.result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</td><td>${Object.hasOwn(categories,tr.category) && canTrain(profile.role, profile.units, a, profile.id, tr.category, !!profile.all_units) ? `<button data-training="${tr.id}">แก้ไข</button>` : ""}</td></tr>`).join("")}</tbody></table></div></section>`;
   }
-  body += `<section class="card"><h2>ประวัติการดำเนินการ</h2>${d.activities.map((e: Row) => `<div class="timeline"><small>${date(e.created_at)} · ${esc(e.display_name || "ผู้สมัคร")}</small><p><b>${esc(actionLabel(e.action))}</b></p><p>${esc(e.note)}</p></div>`).join("")}</section></div><div><section class="card"><h2>ข้อมูลผู้สมัคร</h2><div class="keyvals">${Object.entries(
+  body += `<section class="card" data-detail-group="history"><h2>ประวัติการดำเนินการ</h2>${d.activities.map((e: Row) => `<div class="timeline"><small>${date(e.created_at)} · ${esc(e.display_name || "ผู้สมัคร")}</small><p><b>${esc(actionLabel(e.action))}</b></p><p>${esc(e.note)}</p></div>`).join("")}</section></div><div><section class="card" data-detail-group="general"><h2>ข้อมูลผู้สมัคร</h2><div class="keyvals">${Object.entries(
     values,
   )
     .filter(([key]) => a.data[key])
@@ -620,10 +633,53 @@ async function openApplicant(id: string) {
     )
     .join(
       "",
-    )}</div></section>${hired ? `<section class="card"><h2>ข้อมูลดูแลพนักงาน</h2><div class="keyvals"><div><small>Coach</small>${esc(person(a.coach_id))}</div><div><small>Supervisor</small>${esc(person(a.supervisor_id))}</div><div><small>ทะเบียน / รถ</small>${esc(a.data.plate || "—")} / ${fleet(a.data.fleet_type)}</div><div><small>เริ่มงานจริง</small>${date(a.actual_start_date)}</div><div><small>สถานะงาน</small>${a.employment_status === "RESIGNED" ? "ลาออก" : a.employment_status === "ACTIVE" ? "ทำงานอยู่" : "รอเริ่มงาน"}</div><div><small>ลาออก</small>${date(a.resignation_date)}</div></div></section>` : ""}${evals.length ? `<section class="card"><h2>ประวัติสัมภาษณ์</h2>${evals.map((e) => `<div class="slot"><b>รอบ ${e.round + 1} · ${e.stage === "DRAFT" ? "แบบร่าง" : e.result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</b><p>คะแนน ${e.score || "—"}</p><p>ประเภทเชื้อเพลิง ${esc(e.fuel || "—")}</p><p>${esc(e.note)}</p><small>${esc(person(e.evaluator_id))} · ${date(e.updated_at)}</small></div>`).join("")}</section>` : ""}${attachmentsEnabled && is("ADMIN", "HR", "MANAGER") ? `<section class="card"><h2>เอกสารประกอบ</h2><p class="muted">PDF / JPG / PNG ไม่เกิน 5 MB ต่อไฟล์ เก็บในพื้นที่ส่วนตัว</p>${manage || ownManager ? '<form id="upload"><label>เลือกเอกสาร<span class="req">*</span><input type="file" name="file" accept="application/pdf,image/jpeg,image/png" required></label><button type="submit" style="margin-top:12px">อัปโหลดเอกสาร</button><p class="error" data-error></p></form>' : ""}${d.documents.map((doc: Row) => `<p><button data-document="${doc.id}">${esc(doc.title)} ↗</button></p>`).join("")}</section>` : ""}</div></div>`;
+    )}</div></section>${hired ? `<section class="card" data-detail-group="employment"><h2>ข้อมูลดูแลพนักงาน</h2><div class="keyvals"><div><small>Coach</small>${esc(person(a.coach_id))}</div><div><small>Supervisor</small>${esc(person(a.supervisor_id))}</div><div><small>ทะเบียน / รถ</small>${esc(a.data.plate || "—")} / ${fleet(a.data.fleet_type)}</div><div><small>เริ่มงานจริง</small>${date(a.actual_start_date)}</div><div><small>สถานะงาน</small>${a.employment_status === "RESIGNED" ? "ลาออก" : a.employment_status === "ACTIVE" ? "ทำงานอยู่" : "รอเริ่มงาน"}</div><div><small>ลาออก</small>${date(a.resignation_date)}</div></div></section>` : ""}${evals.length ? `<section class="card" data-detail-group="history"><h2>ประวัติสัมภาษณ์</h2>${evals.map((e) => `<div class="slot"><b>รอบ ${e.round + 1} · ${e.stage === "DRAFT" ? "แบบร่าง" : e.result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</b><p>คะแนน ${e.score || "—"}</p><p>ประเภทเชื้อเพลิง ${esc(e.fuel || "—")}</p><p>${esc(e.note)}</p><small>${esc(person(e.evaluator_id))} · ${date(e.updated_at)}</small></div>`).join("")}</section>` : ""}${attachmentsEnabled && is("ADMIN", "HR", "MANAGER") ? `<section class="card" data-detail-group="general"><h2>เอกสารประกอบ</h2><p class="muted">PDF / JPG / PNG ไม่เกิน 5 MB ต่อไฟล์ เก็บในพื้นที่ส่วนตัว</p>${manage || ownManager ? '<form id="upload"><label>เลือกเอกสาร<span class="req">*</span><input type="file" name="file" accept="application/pdf,image/jpeg,image/png" required></label><button type="submit" style="margin-top:12px">อัปโหลดเอกสาร</button><p class="error" data-error></p></form>' : ""}${d.documents.map((doc: Row) => `<p><button data-document="${doc.id}">${esc(doc.title)} ↗</button></p>`).join("")}</section>` : ""}</div></div>`;
   shell(body);
+  organizeApplicant(a, handoverComplete);
+  if(opening)window.scrollTo({top:0});
   dynamicRequirements();
 }
+function selectDetailTab(tab: DetailTab, focus = false) {
+  const target=root.querySelector<HTMLButtonElement>(`[data-detail-tab="${tab}"]`);
+  if(!target) return;
+  selectedDetailTab=tab;
+  root.querySelectorAll<HTMLElement>("[data-detail-panel]").forEach(p=>p.hidden=p.dataset.detailPanel!==tab);
+  root.querySelectorAll<HTMLButtonElement>("[data-detail-tab]").forEach(b=>{const active=b===target;b.setAttribute("aria-selected",String(active));b.tabIndex=active?0:-1;});
+  if(focus)target.focus();
+}
+function organizeApplicant(a: Applicant, handoverComplete: boolean) {
+  const content=root.querySelector("main.content")!;
+  const sections=Array.from(content.querySelectorAll<HTMLElement>("[data-detail-group]"));
+  const holder=document.createElement("section");holder.className="detail-workspace surface";
+  const groups=new Set(sections.map(s=>s.dataset.detailGroup));
+  const visibleTabs=detailTabs.filter(t=>groups.has(t.id));
+  holder.innerHTML=`<div class="detail-tabs" role="tablist" aria-label="ข้อมูลผู้สมัคร">${visibleTabs.map(t=>`<button type="button" role="tab" id="detail-tab-${t.id}" aria-controls="detail-panel-${t.id}" data-detail-tab="${t.id}" aria-selected="false" tabindex="-1">${t.label}</button>`).join('')}</div>${visibleTabs.map(t=>`<div role="tabpanel" id="detail-panel-${t.id}" aria-labelledby="detail-tab-${t.id}" data-detail-panel="${t.id}" tabindex="0" hidden></div>`).join('')}`;
+  for(const section of sections) holder.querySelector(`[data-detail-panel="${section.dataset.detailGroup}"]`)!.append(section);
+  content.querySelectorAll(":scope > .split").forEach(s=>s.remove());
+  content.append(holder);
+  const employmentPanel=holder.querySelector('[data-detail-panel="employment"]');
+  if(employmentPanel)employmentPanel.insertAdjacentHTML("afterbegin",`<section class="card"><h2>สรุปการเริ่มงาน</h2><div class="keyvals"><div><small>กำหนดเริ่มงาน</small>${date(a.scheduled_start_date)}</div><div><small>วันเริ่มงานจริง</small>${date(a.actual_start_date)}</div><div><small>สถานะการทำงาน</small>${a.employment_status==='ACTIVE'?'ทำงานอยู่':a.employment_status==='RESIGNED'?'ลาออก':'รอเริ่มงาน'}</div><div><small>การส่งมอบ</small>${handoverComplete?'ข้อมูลครบแล้ว':'ยังไม่ครบ'}</div></div></section>`);
+  const header=content.querySelector('.topbar');
+  header?.insertAdjacentHTML("beforebegin",`<nav class="breadcrumb" aria-label="ตำแหน่งปัจจุบัน"><button type="button" data-action="back">${screen==='dashboard'?'งานที่ต้องทำ':screen==='training'?'การอบรม':is("COACH")?'พนักงาน':'รายการผู้สมัคร'}</button><span aria-hidden="true">›</span><span>${esc(a.full_name)}</span></nav>`);
+  const available=Array.from(content.querySelectorAll<HTMLButtonElement>("[data-workflow],[data-action]")).filter(b=>!b.disabled).map(b=>b.dataset.workflow||b.dataset.action||"");
+  if(!handoverComplete)available.push("handover-incomplete");
+  const next=nextTask(a,available);
+  const progress=progressState(a);
+  const overview=content.querySelector<HTMLElement>(":scope > .card");
+  overview?.classList.add("applicant-overview");
+  const secondaryActions=overview?.querySelector<HTMLElement>(".detail-head .actions");
+  if(secondaryActions?.children.length) {
+    const fold=document.createElement("details");fold.className="case-actions";
+    fold.innerHTML='<summary>จัดการใบสมัคร</summary>';
+    secondaryActions.before(fold);fold.append(secondaryActions);
+  }
+  overview?.insertAdjacentHTML("beforeend",`<ol class="recruitment-steps" aria-label="ความคืบหน้าการสมัคร">${progress.labels.map((label,i)=>`<li class="${progress.paused?(i===0?'done':'') : i<progress.current?'done':i===progress.current?'current':''}" ${i===progress.current?'aria-current="step"':''}><span>${!progress.paused&&i<progress.current?'✓':i+1}</span><small>${label}</small></li>`).join('')}</ol>${progress.paused?`<p class="hint">สถานะปัจจุบัน: ${esc(statuses[a.status])} · แถบขั้นตอนไม่ใช่ผลการรับเข้าทำงาน</p>`:''}`);
+  const nextCard=document.createElement("section");nextCard.className="next-task card";
+  nextCard.innerHTML=`<div><p class="section-label">งานถัดไป</p><h2>${next.label||'ติดตามสถานะ'}</h2><p class="muted">${next.hint}</p></div>${next.label?`<button class="primary" type="button" data-next-target="${next.target}" data-next-tab="${next.tab}">${next.label} →</button>`:''}`;
+  holder.before(nextCard);
+  selectDetailTab(visibleTabs.some(t=>t.id===selectedDetailTab)?selectedDetailTab:visibleTabs[0]!.id);
+}
+
 function actionLabel(a: string) {
   return (
     (
@@ -1061,6 +1117,13 @@ function addLine() {
   )}</div><button type="button" data-remove-line>ลบรายการนี้</button>`;
   parent.appendChild(div);
 }
+document.addEventListener("keydown",e=>{
+ const tab=(e.target as Element).closest<HTMLButtonElement>("[data-detail-tab]");
+ if(!tab||!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;
+ const tabs=Array.from(root.querySelectorAll<HTMLButtonElement>("[data-detail-tab]"));
+ const i=tabs.indexOf(tab);const n=e.key==='Home'?0:e.key==='End'?tabs.length-1:(i+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;
+ e.preventDefault();selectDetailTab(tabs[n]!.dataset.detailTab as DetailTab,true);
+});
 document.addEventListener("change", (e) => {
   if ((e.target as Element).closest("#profile")) profileRequirements();
   const el = e.target as HTMLInputElement;
@@ -1087,6 +1150,14 @@ document.addEventListener("click", (e) => {
   if (!el) return;
   void (async () => {
     try {
+      if (el.dataset.detailTab) {selectDetailTab(el.dataset.detailTab as DetailTab); return;}
+      if (el.dataset.nextTarget) {
+        selectDetailTab(el.dataset.nextTab as DetailTab);
+        const target=root.querySelector<HTMLButtonElement>(["recall","new-topic"].includes(el.dataset.nextTarget) ? `[data-action="${el.dataset.nextTarget}"]` : `[data-workflow="${el.dataset.nextTarget}"]`);
+        if(target&&!target.disabled)target.click();
+        else {const panel=root.querySelector<HTMLElement>(`[data-detail-panel="${el.dataset.nextTab}"]`);panel?.scrollIntoView({block:"start",behavior:"smooth"});panel?.focus();}
+        return;
+      }
       if (el.dataset.workflow) {
         const template = root.querySelector<HTMLTemplateElement>(`#workflow-${el.dataset.workflow}`);
         if (template) {
@@ -1112,7 +1183,7 @@ document.addEventListener("click", (e) => {
         };
         await render();
       }
-      if (el.dataset.open) await openApplicant(el.dataset.open);
+      if (el.dataset.open) await openApplicant(el.dataset.open,el.dataset.openTab as DetailTab|undefined);
       if (el.dataset.page) {
         filters.offset = Math.max(
           0,

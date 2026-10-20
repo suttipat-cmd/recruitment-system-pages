@@ -67,6 +67,10 @@ for (const [index,status] of ["INTERVIEW","HIRED","HIRED","STARTED"].entries()) 
   const seed={birth_date:"1990-01-01",national_id:"1234567890123",fuel_type:"รถไฟฟ้า",vehicle_type:"10W",license_type:"ท.3",driver_license_no:"TEST",forwarded_at:new Date().toISOString(),...(assigned?{plate:"ทดสอบ-001",fleet_type:"COMPANY"}:{})};
   await db.query(`insert into rm_private.applicants(full_name,phone,position,original_unit,hiring_unit,status,owner_id,coach_id,supervisor_id,scheduled_start_date,actual_start_date,employment_status,data)values($1,$2,'DRIVER','TL-ขอนแก่น','TL-ขอนแก่น',$3,$4,$5,$6,case when $7 then current_date else null end,case when $8 then current_date else null end,case when $8 then 'ACTIVE' else 'PENDING' end,$9)`,["ทดสอบ "+["สัมภาษณ์","ส่งมอบ","นัดเริ่มงาน","อบรม"][index],"081111111"+index,status,users[2]!.id,assigned?users[3]!.id:null,assigned?users[2]!.id:null,index===3,index===3,JSON.stringify(seed)]);
 }
+// Screening fixtures for the role work queue and next-action UI.
+for(const [index,status] of ["HR_REVIEW","WAITING_INFO"].entries()) {
+ await db.query(`insert into rm_private.applicants(full_name,phone,position,original_unit,hiring_unit,status,data)values($1,$2,'DRIVER','TL-ขอนแก่น','TL-ขอนแก่น',$3,$4)`,["ทดสอบ "+(index?"รอข้อมูล":"คัดกรอง"),"082222222"+index,status,JSON.stringify({birth_date:"1990-01-01",national_id:"123456789012"+(4+index),fuel_type:"รถน้ำมัน",vehicle_type:"10W",license_type:"ท.3",followup_date:"2026-10-20"})]);
+}
 let serial = Promise.resolve();
 const server = await createServer({
   configFile: false,
