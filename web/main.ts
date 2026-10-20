@@ -140,7 +140,8 @@ function dataOf(form: HTMLFormElement): Row {
   return d;
 }
 function openModal(title: string, body: string, formId?: string) {
-  modal.innerHTML = `${button("✕", "close-modal", "close")}<h2>${title}</h2>${formId ? `<form id="${formId}">${body}<div class="actions"><button class="primary" type="submit">บันทึก</button>${button("ยกเลิก", "close-modal")}</div><p class="error" data-error></p></form>` : body}`;
+  modal.innerHTML = `${button("✕", "close-modal", "close")}<h2 id="dialog-title">${title}</h2>${formId ? `<form id="${formId}">${body}<div class="actions"><button class="primary" type="submit">บันทึก</button>${button("ยกเลิก", "close-modal")}</div><p class="error" data-error></p></form>` : body}`;
+  modal.setAttribute("aria-labelledby","dialog-title");
   modal.showModal();
 }
 function formError(form: HTMLFormElement, e: unknown) {
@@ -207,7 +208,7 @@ async function init() {
   }
 }
 function login() {
-  root.innerHTML = `<main class="login card"><div class="brand">Recruitment System<small>รับสมัคร • สัมภาษณ์ • ดูแลพนักงาน</small></div><h2>เข้าสู่ระบบ</h2><p class="muted">ใช้อีเมลที่ Admin เปิดสิทธิ์ให้แล้ว</p><form id="login">${field("email", "อีเมล", "", true, "email", 'autocomplete="username"')}${field("password", "รหัสผ่าน", "", true, "password", 'autocomplete="current-password"')}<button type="submit" class="primary">เข้าสู่ระบบ</button><p data-error class="error"></p></form><div class="actions">${button("ลืมรหัสผ่าน", "forgot")}${button("สมัครงานออนไลน์", "apply")}</div></main>`;
+  root.innerHTML = `<main class="login card"><div class="brand">Recruitment System<small>รับสมัคร • สัมภาษณ์ • ดูแลพนักงาน</small></div><h2>เข้าสู่ระบบ</h2><p class="muted">ใช้อีเมลที่ Admin เปิดสิทธิ์ให้แล้ว</p><form id="login">${field("email", "อีเมล", "", true, "email", 'autocomplete="username"')}${field("password", "รหัสผ่าน", "", true, "password", 'autocomplete="current-password"')}<button type="submit" class="primary">เข้าสู่ระบบ</button><p data-error class="error"></p></form></main>`;
 }
 async function load() {
   const {
@@ -226,6 +227,36 @@ async function load() {
   settings = snapshot.settings;
   await render();
 }
+const icon = (paths:string) => `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+const navIcons: Record<string,string> = {
+ dashboard:icon('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>'),
+ applicants:icon('<circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0112 0v2m1-16a3 3 0 010 6m2 4a5 5 0 013 4v2"/>'),
+ requests:icon('<rect x="5" y="4" width="14" height="18" rx="2"/><path d="M9 4V2h6v2M9 10h6m-6 4h6m-6 4h3"/>'),
+ training:icon('<path d="M3 4h6a4 4 0 013 2 4 4 0 013-2h6v16h-6a4 4 0 00-3 2 4 4 0 00-3-2H3zM12 6v16"/>'),
+ guide:icon('<circle cx="12" cy="12" r="9"/><path d="M9 9a3 3 0 116 0c0 2-3 2-3 4m0 4h.01"/>'),
+ admin:icon('<circle cx="12" cy="12" r="4"/><path d="M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1z"/>')
+};
+const workflowForms: Record<string,[string,string]> = {
+  screen:["คัดกรองผู้สมัคร","บันทึกผลคัดกรอง"], interview:["สัมภาษณ์และรับเข้าทำงาน","บันทึกผลสัมภาษณ์"],
+  handover:["ส่งมอบพนักงาน","กำหนดผู้ดูแล / ส่งมอบ"], "road-test":["ผลทดลองขับ","บันทึกผลทดลองขับ"],
+  employment:["เริ่มงาน / สถานะพนักงาน","จัดการการเริ่มงาน"], training:["บันทึกการอบรม","+ บันทึกผลอบรม"],
+  settings:["การรับสมัครและลิงก์หลังบ้าน","แก้ไขการตั้งค่า"],unit:["เพิ่มหน่วยงาน","+ เพิ่มหน่วยงาน"],upload:["เอกสารประกอบ","แนบเอกสาร"]
+};
+function compactForms() {
+  for (const [id,[title,label]] of Object.entries(workflowForms)) {
+    const form = root.querySelector<HTMLFormElement>(`form#${id}`);
+    if (!form) continue;
+    const template = document.createElement("template");
+    template.id = `workflow-${id}`;
+    template.content.append(form.cloneNode(true));
+    const action = document.createElement("button");
+    action.type = "button"; action.className = "primary";
+    action.textContent = label; action.dataset.workflow = id; action.dataset.title = title;
+    action.setAttribute("aria-haspopup","dialog");
+    if (form.querySelector("fieldset:disabled")) {action.disabled=true;action.title="กรอกข้อมูลส่งมอบให้ครบก่อน";}
+    form.replaceWith(action, template);
+  }
+}
 function shell(body: string) {
   const nav = [
     ["dashboard", "ภาพรวม / งานที่ต้องทำ"],
@@ -235,7 +266,9 @@ function shell(body: string) {
     ["guide", "วิธีใช้งาน"],
     ...(is("ADMIN") ? [["admin", "ตั้งค่าระบบ"]] : []),
   ];
-  root.innerHTML = `<div class="shell"><aside class="sidebar"><div class="brand">Recruitment<small>PEOPLE OPERATIONS · V4.4</small></div>${nav.map(([key, label]) => `<button type="button" data-nav="${key}" class="${screen === key ? "active" : ""}">${label}</button>`).join("")}<div class="bottom">${button("แบบฟอร์มสมัครงาน ↗", "apply")}<div class="profile">${esc(profile.display_name)}<small>${roles[profile.role]}</small></div><div class="actions">${button("รหัสผ่าน", "password")}${button("ออกจากระบบ", "logout")}</div></div></aside><main class="content">${body}</main></div>`;
+  const navButton = (key:string,label:string) => `<button type="button" data-nav="${key}" title="${label}" aria-label="${label}" ${screen === key ? 'aria-current="page"' : ''} class="${screen === key ? "active" : ""}"><span class="nav-icon" aria-hidden="true">${navIcons[key]}</span><span class="nav-label">${label}</span></button>`;
+  root.innerHTML = `<div class="shell" data-role="${profile.role}"><aside class="sidebar" aria-label="เมนูหลัก"><div class="brand"><span class="brand-mark">R</span><span class="nav-label">Recruitment<small>WORKSPACE · V4.5</small></span></div><button class="mobile-menu" type="button" data-action="toggle-menu" aria-expanded="false" aria-label="เปิดหรือปิดเมนู">☰ เมนู</button><nav>${nav.map(([key,label]) => navButton(key!,label!)).join("")}</nav><div class="bottom"><button type="button" data-action="apply" title="แบบฟอร์มสมัครงาน" aria-label="แบบฟอร์มสมัครงาน"><span class="nav-icon" aria-hidden="true">↗</span><span class="nav-label">แบบฟอร์มสมัครงาน</span></button><div class="profile"><span class="avatar" aria-hidden="true">${esc(profile.display_name.slice(0,1))}</span><span class="nav-label">${esc(profile.display_name)}<small>${roles[profile.role]}</small></span></div><button type="button" data-action="password" title="รหัสผ่าน" aria-label="รหัสผ่าน"><span class="nav-icon" aria-hidden="true">⚿</span><span class="nav-label">รหัสผ่าน</span></button><button type="button" data-action="logout" title="ออกจากระบบ" aria-label="ออกจากระบบ"><span class="nav-icon" aria-hidden="true">⇥</span><span class="nav-label">ออกจากระบบ</span></button></div></aside><main class="content"><div class="workspace-context"><span>${roles[profile.role]} Workspace</span><span>${esc(is("MANAGER") ? profile.all_units ? "ทุกหน่วยงาน · สิทธิ์พิเศษ" : profile.units.join(" · ") : "Recruitment System")}</span></div>${body}</main></div>`;
+  compactForms();
 }
 function head(title: string, sub: string, actions = "") {
   return `<header class="topbar"><div><p class="section-label">Recruitment System</p><h1>${title}</h1><p class="muted" style="margin:8px 0 0">${sub}</p></div><div class="actions">${actions}${button("รีเฟรช", "refresh")}</div></header>`;
@@ -263,47 +296,19 @@ async function render() {
 }
 async function dashboard() {
   const d = await rpc("dashboard", { unit: filters.unit });
-  const c = d.counts;
-  const k = d.kpi14;
-  const r = d.retention;
-  return (
-    head(
-      "วันนี้ต้องทำอะไร",
-      "เลือกงานจากรายการด้านล่าง ไม่จำเป็นต้องมีคำขอคนก่อนเริ่มรับสมัคร",
-      is("ADMIN", "HR")
-        ? button("+ เพิ่มผู้สมัคร", "new-applicant", "primary")
-        : "",
-    ) +
-    `${is("ADMIN","HR") ? `<section class="card hr-pin-card" id="hr-application-pin" aria-live="polite">กำลังโหลด PIN สำหรับผู้สมัคร…</section>` : ""}<div class="grid">${[
-      ["รอ HR ตรวจ", (c.HR_REVIEW || 0) + (c.WAITING_INFO || 0), "HR_REVIEW"],
-      ["รอสัมภาษณ์", c.INTERVIEW || 0, "INTERVIEW"],
-      ["รอเริ่มงาน", c.HIRED || 0, "HIRED"],
-      ["พนักงานเริ่มงานแล้ว", c.STARTED || 0, "STARTED"],
-    ]
-      .map(
-        ([label, n, status]) =>
-          `<div class="card stat"><small>${label}</small><strong>${n}</strong><button data-filter="${status}">เปิดรายการ →</button></div>`,
-      )
-      .join(
-        "",
-      )}</div><div class="split"><section class="card"><h2>เส้นทางรับคน</h2><div class="flow"><span>สมัครงาน</span>→<span>HR คัดกรอง</span>→<span>สัมภาษณ์</span>→<span>เริ่มงาน</span></div><p class="muted">Supervisor ยืนยันผล “ผ่าน” ถือว่ารับเข้าทำงานทันที Driver Coach บันทึกผลทดลองขับแยกภายหลัง และ HR ผูกคำขอคนได้</p>${is("ADMIN", "HR", "MANAGER") ? button("ดูผู้สมัครสำรอง", "reserves") : ""}</section><section class="card"><h2>ผู้เริ่มงานใน 90 วันล่าสุด</h2><small>นับวันเริ่มงานจริงตั้งแต่ ${date(retention([], today()).from)} ถึง ${date(today())}</small><strong style="display:block;font-size:32px;margin-top:12px">${r.rate === null ? "—" : r.rate + "%"}</strong><div class="progress"><i style="width:${Math.min(100, r.rate || 0)}%"></i></div><p>ยังทำงาน ${r.active} / เริ่มงาน ${r.total} คน · เป้าหมาย 90%</p><small>ผลอบรมเก็บแยก ไม่นำมาตัดสิน KPI นี้</small></section></div>${
-      is("ADMIN", "HR", "MANAGER")
-        ? `<section class="card"><h2>จัดหาคนขับภายใน 14 วัน</h2><div class="grid">${[
-            ["อัตราคนขับ", k.total],
-            ["รับผ่านแล้ว", k.filled],
-            ["ทัน 14 วัน", k.on_time],
-            ["ยังไม่ครบ / เกินกำหนด", k.overdue],
-          ]
-            .map(
-              ([l, n]) =>
-                `<div class="stat"><small>${l}</small><strong>${n}</strong></div>`,
-            )
-            .join(
-              "",
-            )}</div><p class="muted">เริ่มนับเมื่อ HR รับเรื่อง จบเมื่อ Supervisor ยืนยันผ่าน นับคนขับ 1 คน = 1 อัตรา เด็กติดรถแยกติดตามและไม่นับ KPI นี้</p>${button("ดูคำขอคน", "requests")}</section>`
-        : ""
-    }`
-  );
+  const c = d.counts, k = d.kpi14, r = d.retention;
+  const work = {
+    ADMIN:{title:"ศูนย์ดูแลระบบ",sub:"จัดการผู้ใช้งาน สิทธิ์ และการตั้งค่า ให้ทีมพร้อมทำงาน",label:"SYSTEM ADMINISTRATION",action:button("จัดการผู้ใช้และตั้งค่า", "admin-workspace", "primary")},
+    HR:{title:"งานสรรหาของคุณ",sub:"ตรวจใบสมัคร ส่งสัมภาษณ์ และติดตามวันเริ่มงานในที่เดียว",label:"RECRUITMENT OPERATIONS",action:button("+ เพิ่มผู้สมัคร","new-applicant","primary")},
+    MANAGER:{title:"งานของหน่วยงาน",sub:"แจ้งขอคน รับงานสัมภาษณ์ และส่งมอบพนักงานให้ผู้ดูแล",label:"SUPERVISOR WORKSPACE",action:button("+ แจ้งขอคน","new-request","primary")},
+    COACH:{title:"งานดูแลพนักงานของคุณ",sub:"ตรวจรายชื่อพนักงาน และบันทึกผลทดลองขับเฉพาะคนที่ได้รับมอบหมาย",label:"DRIVER COACH WORKSPACE",action:button("เปิดรายชื่อพนักงาน","coach-workspace","primary")}
+  }[profile.role];
+  const stats = is("COACH") ? [["รอเริ่มงาน",c.HIRED||0,"HIRED"],["เริ่มงานแล้ว",c.STARTED||0,"STARTED"]] : is("MANAGER") ? [["รอสัมภาษณ์",c.INTERVIEW||0,"INTERVIEW"],["รอเริ่มงาน",c.HIRED||0,"HIRED"],["เริ่มงานแล้ว",c.STARTED||0,"STARTED"]] : [["รอ HR ตรวจ",(c.HR_REVIEW||0)+(c.WAITING_INFO||0),"HR_REVIEW"],["รอสัมภาษณ์",c.INTERVIEW||0,"INTERVIEW"],["รอเริ่มงาน",c.HIRED||0,"HIRED"],["เริ่มงานแล้ว",c.STARTED||0,"STARTED"]];
+  return head(work.title,work.sub,work.action) + `<section class="workspace-hero"><div><p class="section-label">${work.label}</p><h2>สวัสดี ${esc(profile.display_name)}</h2><p>${is("COACH") ? "เลือกพนักงาน → ตรวจข้อมูล → บันทึกผลทดลองขับ" : is("MANAGER") ? "รับงานสัมภาษณ์ → ยืนยันผล → ส่งมอบและติดตามอบรม" : is("HR") ? "คัดกรอง → ส่งสัมภาษณ์ → กำหนดเริ่มงาน → ติดตามพนักงาน" : "ดูแลสิทธิ์ผู้ใช้ → ตั้งค่าการรับสมัคร → ตรวจประวัติระบบ"}</p></div><span class="role-pill">${roles[profile.role]}</span></section>` +
+  `${is("ADMIN","HR") ? '<section class="card hr-pin-card" id="hr-application-pin" aria-live="polite">กำลังโหลด PIN สำหรับผู้สมัคร…</section>' : ''}<div class="grid role-stats">${stats.map(([label,n,status])=>`<section class="card stat"><small>${label}</small><strong>${n}</strong><button data-filter="${status}">เปิดรายการ →</button></section>`).join("")}</div>` +
+  `${is("ADMIN") ? `<section class="card"><h2>เครื่องมือผู้ดูแลระบบ</h2><p class="muted">จัดการบัญชี บทบาท หน่วยงาน ลิงก์หลังบ้าน และตรวจสอบประวัติ</p>${button("เปิดการตั้งค่าระบบ","admin-workspace")}</section>` : ''}` +
+  `${is("HR","MANAGER") ? `<div class="split"><section class="card"><div class="section-heading"><h2>จัดหาคนขับภายใน 14 วัน</h2>${button("ดูคำขอคน","requests")}</div><div class="grid">${[["อัตราคนขับ",k.total],["รับผ่านแล้ว",k.filled],["ทัน 14 วัน",k.on_time],["ยังไม่ครบ / เกินกำหนด",k.overdue]].map(([label,n])=>`<div class="stat"><small>${label}</small><strong>${n}</strong></div>`).join('')}</div><p class="hint">เริ่มเมื่อ HR รับเรื่อง จบเมื่อ Supervisor ยืนยันผ่าน</p></section><section class="card"><h2>ผู้เริ่มงานใน 90 วันล่าสุด</h2><strong class="metric-value">${r.rate === null ? "—" : r.rate+"%"}</strong><div class="progress"><i style="width:${Math.min(100,r.rate||0)}%"></i></div><p>ยังทำงาน ${r.active} / เริ่มงาน ${r.total} คน · เป้าหมาย 90%</p><small>นับวันเริ่มงานจริง ${date(retention([],today()).from)} – ${date(today())}</small></section></div>${button("ดูผู้สมัครสำรอง","reserves")}` : ''}` +
+  `${is("COACH") ? `<section class="card"><h2>ขั้นตอนบันทึกผลทดลองขับ</h2><div class="flow"><span>1. เลือกพนักงาน</span>→<span>2. เปิดผลทดลองขับ</span>→<span>3. ระบุผลและวันที่</span></div><p class="muted">บันทึกได้เฉพาะพนักงานที่ได้รับมอบหมายให้คุณดูแล</p>${button("ดูรายชื่อพนักงาน","coach-workspace")}</section>` : ''}`;
 }
 async function applicantList() {
   const training = screen === "training";
@@ -311,7 +316,7 @@ async function applicantList() {
   const list = await rpc("applicants", f);
   return (
     head(
-      training ? "การอบรมพนักงาน" : "รายการผู้สมัคร",
+      training ? "การอบรมพนักงาน" : is("COACH") ? "พนักงานและงานทดลองขับ" : is("MANAGER") ? "ผู้สมัครและพนักงานในความรับผิดชอบ" : "รายการผู้สมัคร",
       training
         ? "เปิดพนักงานเพื่อดูหรือบันทึกผลอบรมตามสิทธิ์"
         : "ค้นหา → เปิดรายการ → ทำขั้นตอนถัดไป",
@@ -334,7 +339,7 @@ async function applicantList() {
             ),
           )
         : ""
-    }<button type="submit">ค้นหา</button></form><div class="table-wrap"><table><thead><tr><th>ชื่อผู้สมัคร</th><th>ตำแหน่ง / หน่วยงาน</th><th>สถานะ</th><th>วันที่สมัคร</th><th>ผู้สัมภาษณ์</th><th></th></tr></thead><tbody>${list.rows.map((a: Applicant) => `<tr><td><b>${esc(a.full_name)}</b><br><small>${esc(a.phone)}</small></td><td>${position(a.position)}<br><small>${esc(a.hiring_unit)}</small></td><td>${badge(a.status)}</td><td>${date(a.created_at)}</td><td>${esc(person(a.owner_id))}</td><td><button data-open="${a.id}">เปิดรายการ →</button></td></tr>`).join("")}</tbody></table>${!list.rows.length ? '<div class="empty">ยังไม่มีรายการในเงื่อนไขนี้</div>' : ""}</div><div class="pagination"><small>ทั้งหมด ${list.total} รายการ · หน้า ${Math.floor(filters.offset / 30) + 1}</small><div class="actions"><button data-page="-1" ${filters.offset === 0 ? "disabled" : ""}>ก่อนหน้า</button><button data-page="1" ${filters.offset + 30 >= list.total ? "disabled" : ""}>ถัดไป</button></div></div></section>`
+    }<button type="submit">ค้นหา</button></form><div class="table-wrap"><table><thead><tr><th>ชื่อผู้สมัคร</th><th>ตำแหน่ง / หน่วยงาน</th><th>สถานะ</th><th>วันที่สมัคร</th><th>${is("COACH") ? "Driver Coach / งานที่รับผิดชอบ" : "ผู้สัมภาษณ์"}</th><th></th></tr></thead><tbody>${list.rows.map((a: Applicant) => `<tr><td><b>${esc(a.full_name)}</b><br><small>${esc(a.phone)}</small></td><td>${position(a.position)}<br><small>${esc(a.hiring_unit)}</small></td><td>${badge(a.status)}</td><td>${date(a.created_at)}</td><td>${is("COACH") ? `${esc(person(a.coach_id))}${a.coach_id === profile.id ? '<br><span class="badge">งานของฉัน</span>' : '<br><small>ดูข้อมูล</small>'}` : esc(person(a.owner_id))}</td><td><button data-open="${a.id}">เปิดรายการ →</button></td></tr>`).join("")}</tbody></table>${!list.rows.length ? '<div class="empty">ยังไม่มีรายการในเงื่อนไขนี้</div>' : ""}</div><div class="pagination"><small>ทั้งหมด ${list.total} รายการ · หน้า ${Math.floor(filters.offset / 30) + 1}</small><div class="actions"><button data-page="-1" ${filters.offset === 0 ? "disabled" : ""}>ก่อนหน้า</button><button data-page="1" ${filters.offset + 30 >= list.total ? "disabled" : ""}>ถัดไป</button></div></div></section>`
   );
 }
 function profileFields(a?: Applicant) {
@@ -815,6 +820,16 @@ async function runAction(act: string, d: Row = {}) {
   await openApplicant(detail.applicant.id);
 }
 async function clickAction(action: string) {
+  if (action === "toggle-menu") {
+    const sidebar = root.querySelector(".sidebar")!;
+    const open = sidebar.classList.toggle("mobile-open");
+    sidebar.querySelector(".mobile-menu")?.setAttribute("aria-expanded",String(open));
+    return;
+  }
+  if (["admin-workspace","coach-workspace"].includes(action)) {
+    screen = action === "admin-workspace" ? "admin" : "applicants";
+    filters = {search:"",status:"",unit:"",offset:0}; await render(); return;
+  }
   if (action === "reload") {
     location.reload();
     return;
@@ -1072,6 +1087,15 @@ document.addEventListener("click", (e) => {
   if (!el) return;
   void (async () => {
     try {
+      if (el.dataset.workflow) {
+        const template = root.querySelector<HTMLTemplateElement>(`#workflow-${el.dataset.workflow}`);
+        if (template) {
+          openModal(esc(el.dataset.title || "บันทึกข้อมูล"), (el.dataset.workflow === "employment" ? '<p class="notice">บันทึกกำหนดเริ่มงานก่อน แล้วจึงบันทึกวันเริ่มงานจริงได้</p>' : "") + template.innerHTML);
+          modal.querySelector("form")?.insertAdjacentHTML("beforeend",button("ยกเลิก","close-modal"));
+          dynamicRequirements();
+        }
+        return;
+      }
       if (el.dataset.action) await clickAction(el.dataset.action);
       if (el.dataset.nav) {
         screen = el.dataset.nav;
@@ -1329,11 +1353,13 @@ document.addEventListener("submit", (e) => {
             ...d,
             public_apply: d.public_apply === "true",
           });
+          modal.close();
           toast("บันทึกแล้ว");
           await load();
           break;
         case "unit":
           await rpc("unit", d);
+          modal.close();
           toast("เพิ่มหน่วยงานแล้ว");
           await load();
           break;
