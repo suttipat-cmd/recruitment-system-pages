@@ -1,3 +1,11 @@
+# อัปเดต V4.2.0
+
+ระบบเดิมที่ติดตั้ง V4 แล้ว: รัน `supabase/migrations/20261020105230_application_pin.sql` หนึ่งครั้งใน SQL Editor ก่อนเผยแพร่ UI รุ่นนี้ เป็นการเพิ่มตาราง/ฟังก์ชัน ไม่ล้างข้อมูลเดิม ห้ามรัน migration ฐานเดิมซ้ำ
+
+ระบบใหม่: รัน migration ทั้งสองไฟล์ตามลำดับ การตรวจ RLS ปัจจุบันมี 13 ตาราง (เดิม 11 + application_gate, application_tickets)
+
+PIN เป็นประตูรับแบบสมัคร ไม่ใช่บัญชีผู้ใช้ เก็บ secret และ token hash ใน schema ส่วนตัว ไม่เปิด rm_private ต่อ Data API และไม่ส่ง secret/PIN ผ่าน public_info
+
 # ติดตั้ง Recruitment System Pages V4.1.1
 
 ## ถ้าใช้ Supabase เดิมที่ติดตั้ง V4 แล้ว

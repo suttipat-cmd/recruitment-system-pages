@@ -233,7 +233,7 @@ function shell(body: string) {
     ["guide", "วิธีใช้งาน"],
     ...(is("ADMIN") ? [["admin", "ตั้งค่าระบบ"]] : []),
   ];
-  root.innerHTML = `<div class="shell"><aside class="sidebar"><div class="brand">Recruitment<small>PEOPLE OPERATIONS · V4.1</small></div>${nav.map(([key, label]) => `<button type="button" data-nav="${key}" class="${screen === key ? "active" : ""}">${label}</button>`).join("")}<div class="bottom">${button("แบบฟอร์มสมัครงาน ↗", "apply")}<div class="profile">${esc(profile.display_name)}<small>${roles[profile.role]}</small></div><div class="actions">${button("รหัสผ่าน", "password")}${button("ออกจากระบบ", "logout")}</div></div></aside><main class="content">${body}</main></div>`;
+  root.innerHTML = `<div class="shell"><aside class="sidebar"><div class="brand">Recruitment<small>PEOPLE OPERATIONS · V4.2</small></div>${nav.map(([key, label]) => `<button type="button" data-nav="${key}" class="${screen === key ? "active" : ""}">${label}</button>`).join("")}<div class="bottom">${button("แบบฟอร์มสมัครงาน ↗", "apply")}<div class="profile">${esc(profile.display_name)}<small>${roles[profile.role]}</small></div><div class="actions">${button("รหัสผ่าน", "password")}${button("ออกจากระบบ", "logout")}</div></div></aside><main class="content">${body}</main></div>`;
 }
 function head(title: string, sub: string, actions = "") {
   return `<header class="topbar"><div><p class="section-label">Recruitment System</p><h1>${title}</h1><p class="muted" style="margin:8px 0 0">${sub}</p></div><div class="actions">${actions}${button("รีเฟรช", "refresh")}</div></header>`;
@@ -272,7 +272,7 @@ async function dashboard() {
         ? button("+ เพิ่มผู้สมัคร", "new-applicant", "primary")
         : "",
     ) +
-    `<div class="grid">${[
+    `${is("ADMIN","HR") ? `<section class="card hr-pin-card" id="hr-application-pin" aria-live="polite">กำลังโหลด PIN สำหรับผู้สมัคร…</section>` : ""}<div class="grid">${[
       ["รอ HR ตรวจ", (c.HR_REVIEW || 0) + (c.WAITING_INFO || 0), "HR_REVIEW"],
       ["รอสัมภาษณ์", c.INTERVIEW || 0, "INTERVIEW"],
       ["รอเริ่มงาน", c.HIRED || 0, "HIRED"],
@@ -360,12 +360,12 @@ function profileFields(a?: Applicant) {
     ),
   )}${field("line_id", "LINE ID", d.line_id)}${select(
     "current_job_status",
-    "สถานะงานปัจจุบัน",
+    "สถานะการทำงาน",
     opts(
       ["ว่างงาน", "ทำงานอยู่", "อื่นๆ"].map((x) => ({ value: x, label: x })),
       d.current_job_status,
     ),
-  )}${dates("available_start_date", "วันที่พร้อมเริ่มงาน", d.available_start_date)}${field("availability_note", "หมายเหตุความพร้อม", d.availability_note)}${dates("id_issued_at", "วันออกบัตรประชาชน", d.id_issued_at)}${dates("id_expires_at", "วันหมดอายุบัตรประชาชน", d.id_expires_at)}<div class="full notice">ข้อมูลรถและใบขับขี่บังคับเฉพาะพนักงานขับรถ · ระบบเชื้อเพลิงกรอกตอนสัมภาษณ์</div>${select(
+  )}${dates("available_start_date", "วันที่พร้อมเริ่มงาน", d.available_start_date)}${field("availability_note", "หมายเหตุความพร้อม", d.availability_note)}${dates("id_issued_at", "วันออกบัตรประชาชน", d.id_issued_at)}${dates("id_expires_at", "วันหมดอายุบัตรประชาชน", d.id_expires_at)}<div class="full notice">ข้อมูลรถและใบขับขี่จำเป็นเฉพาะผู้สมัครตำแหน่งพนักงานขับรถ</div>${select(
     "vehicle_type",
     "ประเภทรถ",
     opts(
@@ -382,7 +382,7 @@ function profileFields(a?: Applicant) {
       })),
       d.license_type,
     ),
-  )}${field("driver_license_no", "เลขใบขับขี่", d.driver_license_no)}${dates("license_issued_at", "วันออกใบขับขี่", d.license_issued_at)}${dates("license_expires_at", "วันหมดอายุใบขับขี่", d.license_expires_at)}${field("cargo_types", "สินค้าที่เคยขน", d.cargo_types)}${field("construction_brands", "วัสดุก่อสร้าง: สินค้า / ยี่ห้อ", d.construction_brands)}${field("beverage_brands", "น้ำ / โซดา / เบียร์: สินค้า / ยี่ห้อ", d.beverage_brands)}${field("other_cargo_note", "งานขนส่งอื่น", d.other_cargo_note)}${a ? note("", false, "เหตุผลแก้ไข (บังคับเมื่อเปลี่ยนหน่วยงาน)") : ""}</div>`;
+  )}${select("fuel_type", "ประเภทเชื้อเพลิง", opts(["รถก๊าซ", "รถน้ำมัน", "รถไฟฟ้า", "ได้ทั้งหมด"].map(value => ({value,label:value})), d.fuel_type))}${field("driver_license_no", "เลขใบขับขี่", d.driver_license_no)}${dates("license_issued_at", "วันออกใบขับขี่", d.license_issued_at)}${dates("license_expires_at", "วันหมดอายุใบขับขี่", d.license_expires_at)}${field("cargo_types", "สินค้าที่เคยขน", d.cargo_types)}${field("construction_brands", "วัสดุก่อสร้าง: สินค้า / ยี่ห้อ", d.construction_brands)}${field("beverage_brands", "น้ำ / โซดา / เบียร์: สินค้า / ยี่ห้อ", d.beverage_brands)}${field("other_cargo_note", "งานขนส่งอื่น", d.other_cargo_note)}${a ? note("", false, "เหตุผลแก้ไข (บังคับเมื่อเปลี่ยนหน่วยงาน)") : ""}</div>`;
 }
 function applicantPayload(form: HTMLFormElement) {
   const raw = dataOf(form);
@@ -412,13 +412,58 @@ function applyDriverRequirements() {
   if (form.id === "edit-applicant")
     (form.elements.namedItem("position") as HTMLSelectElement).disabled = true;
 }
+let applyTicket = "";
+let applyTicketExpires = 0;
+let pinDeadline = 0;
+let pinRefreshing = false;
+function publicHeader() {
+  return `<header class="apply-header"><a href="#" data-action="login">Recruitment<span>ระบบรับสมัครพนักงาน</span></a><span class="apply-private">ข้อมูลส่งถึงฝ่าย HR</span></header>`;
+}
+function publicApplicationForm() {
+  // Reuse the same fields and validation as HR; group them for a short, scannable form.
+  const template = document.createElement("template");
+  template.innerHTML = profileFields();
+  const fields = template.content.querySelector(".fields")!;
+  const groups = [
+    {title:"ข้อมูลส่วนตัว", hint:"ระบุข้อมูลตามบัตรประชาชนและเบอร์ที่ติดต่อได้", names:["prefix","full_name","gender","birth_date","national_id","phone","line_id","id_issued_at","id_expires_at"]},
+    {title:"ข้อมูลการสมัคร", hint:"เลือกตำแหน่ง หน่วยงาน และความพร้อมในการเริ่มงาน", names:["position","unit","current_job_status","available_start_date","availability_note"]},
+    {title:"ประสบการณ์และใบขับขี่", hint:"ช่องที่มี * จำเป็นสำหรับตำแหน่งพนักงานขับรถ", names:["vehicle_type","license_type","driver_license_no","fuel_type","license_issued_at","license_expires_at","cargo_types","construction_brands","beverage_brands","other_cargo_note"]},
+  ];
+  const sections = groups.map((g,i) => `<section class="apply-section"><div class="apply-section-heading"><span>${i+1}</span><div><h2>${g.title}</h2><p>${g.hint}</p></div></div><div class="fields">${g.names.map(name => fields.querySelector(`[name="${name}"]`)?.closest("label")?.outerHTML || "").join("")}</div></section>`).join("");
+  root.innerHTML = `${publicHeader()}<main class="apply-layout"><aside class="apply-intro"><p class="section-label">มาร่วมงานกับเรา</p><h1>เริ่มต้นงานใหม่ <br>ไปด้วยกัน</h1><p>กรอกข้อมูลสมัครงานให้ครบถ้วน<br>แล้วฝ่าย HR จะติดต่อกลับ</p><div class="apply-help"><b>เตรียมข้อมูลก่อนสมัคร</b><p>บัตรประชาชน · เบอร์โทรศัพท์<br>ข้อมูลใบขับขี่ สำหรับพนักงานขับรถ</p><small>ยังไม่ต้องแนบภาพหรือเอกสาร</small></div></aside><div class="apply-body"><div class="apply-title"><p class="section-label">ใบสมัครออนไลน์</p><h1>สมัครงานกับเรา</h1><p>ช่อง <span class="req">*</span> จำเป็นต้องกรอก · วันที่ใช้ ค.ศ.</p></div><form id="public-apply">${sections}<section class="apply-section apply-consent"><label class="check"><input type="checkbox" name="consent" required><span>ยินยอมให้ใช้ข้อมูลเพื่อการสรรหาและติดต่อกลับ <span class="req">*</span></span></label><p class="muted">ตรวจข้อมูลก่อนส่ง โดยเฉพาะเบอร์โทรศัพท์และหน่วยงานที่สมัคร</p><p class="error" data-error role="alert"></p><button class="primary apply-submit" type="submit">ส่งใบสมัคร →</button></section></form></div></main>`;
+  applyDriverRequirements();
+}
 async function publicPage() {
+  applyTicket = "";
   const { data: info, error } = await db.rpc("recruitment_public_info");
   if (error) throw Error("ยังไม่ได้ติดตั้งฐานข้อมูลการสมัคร");
   units = info.units;
-  root.innerHTML = `<main class="public-form">${button("← กลับเข้าสู่ระบบ", "login")}<section class="card" style="margin-top:20px"><p class="section-label">Join our team</p><h1>สมัครงานกับเรา</h1>${info.open ? `<p class="muted">กรอกข้อมูลเพื่อให้ HR ติดต่อกลับ ช่อง * จำเป็นต้องกรอก · วันที่ใช้ ค.ศ.</p><form id="public-apply">${profileFields()}<label class="check"><input type="checkbox" name="consent" required> ยินยอมให้ใช้ข้อมูลนี้เพื่อการสรรหาและติดต่อกลับ</label><p class="muted">เฟสนี้รับเฉพาะข้อมูลใบสมัคร ยังไม่ต้องแนบไฟล์หรือเอกสาร ระบบไม่เปิดเผยใบสมัครต่อสาธารณะ</p><button class="primary" type="submit">ส่งใบสมัคร</button><p class="error" data-error></p></form>` : '<div class="notice">ขณะนี้ยังไม่เปิดรับสมัครออนไลน์ กรุณาติดต่อ HR</div>'}</section></main>`;
-  applyDriverRequirements();
+  root.innerHTML = `${publicHeader()}<main class="apply-gate card"><div class="gate-icon" aria-hidden="true">↗</div><p class="section-label">สมัครงานออนไลน์</p><h1>สมัครงานกับเรา</h1>${info.open ? `<p class="muted">ขอ PIN 6 หลักจากฝ่าย HR<br>เพื่อเปิดแบบฟอร์มสมัครงาน</p><form id="apply-pin"><label>PIN จาก HR <span class="req">*</span><input class="pin-input" name="pin" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" minlength="6" maxlength="6" placeholder="••••••" required aria-describedby="pin-help"></label><p id="pin-help" class="muted">รหัสเปลี่ยนทุก 1 นาที หากรหัสหมดอายุให้ขอรหัสล่าสุดจาก HR</p><button class="primary apply-submit" type="submit">เปิดแบบฟอร์ม →</button><p class="error" data-error role="alert"></p></form><div class="gate-foot">ยืนยันแล้วกรอกต่อได้ 2 ชั่วโมง<br>รหัสที่เปลี่ยนจะไม่รบกวนใบสมัครที่กำลังกรอก</div>` : '<div class="notice">ขณะนี้ยังไม่เปิดรับสมัครออนไลน์ กรุณาติดต่อ HR</div>'}</main>`;
 }
+async function refreshApplicationPin() {
+  const card = document.querySelector<HTMLElement>("#hr-application-pin");
+  if (!card || !is("ADMIN","HR") || pinRefreshing) return;
+  pinRefreshing = true;
+  try {
+    const {data,error} = await db.rpc("recruitment_application_pin");
+    if (error) throw error;
+    if (!card.isConnected) return;
+    pinDeadline = Date.now() + Math.max(0, Date.parse(data.expires_at)-Date.parse(data.server_time));
+    card.innerHTML = `<div><p class="section-label">PIN สำหรับผู้สมัคร</p><h2>แจ้งรหัสนี้ให้ผู้สมัครก่อนเปิดฟอร์ม</h2><p class="muted">ใช้เปิดฟอร์มเท่านั้น · เปลี่ยนอัตโนมัติทุกนาที</p></div><div class="hr-pin-value"><strong>${esc(data.pin)}</strong><small data-pin-countdown></small></div>`;
+  } catch {
+    card.innerHTML = `<p class="error">โหลด PIN ไม่สำเร็จ กำลังลองใหม่ กรุณารอรหัสล่าสุดก่อนแจ้งผู้สมัคร</p>`;
+    pinDeadline = Date.now()+5000;
+  } finally {pinRefreshing=false;}
+}
+setInterval(() => {
+  const counter = document.querySelector("[data-pin-countdown]");
+  if (counter) counter.textContent = `เปลี่ยนใน ${Math.max(0,Math.ceil((pinDeadline-Date.now())/1000))} วินาที`;
+  if (document.querySelector("#hr-application-pin") && Date.now()>=pinDeadline) {
+    const number = document.querySelector(".hr-pin-value strong");
+    if(number) number.textContent = "••••••";
+    void refreshApplicationPin();
+  }
+},1000);
 async function openApplicant(id: string) {
   const token = ++generation;
   const d = await rpc("detail", { id });
@@ -465,7 +510,8 @@ async function openApplicant(id: string) {
     construction_brands: "วัสดุก่อสร้าง / ยี่ห้อ",
     beverage_brands: "เครื่องดื่ม / ยี่ห้อ",
     other_cargo_note: "ขนส่งอื่น",
-    current_job_status: "งานปัจจุบัน",
+    current_job_status: "สถานะการทำงาน",
+    fuel_type: "ประเภทเชื้อเพลิง",
     available_start_date: "พร้อมเริ่มงาน",
     availability_note: "ความพร้อม",
   };
@@ -1190,8 +1236,18 @@ document.addEventListener("submit", (e) => {
           await load();
           break;
         }
+        case "apply-pin": {
+          const {data,error} = await db.rpc("recruitment_unlock_application", {p_pin:String(d.pin)});
+          if(error) throw error;
+          if(!data.ok) throw Error(data.message);
+          applyTicket = data.token;
+          applyTicketExpires = Date.now() + Math.max(0,Date.parse(data.expires_at)-Date.parse(data.server_time));
+          publicApplicationForm();
+          break;
+        }
         case "public-apply": {
-          const payload = applicantPayload(form);
+          if (!applyTicket || Date.now() >= applyTicketExpires) throw Error("สิทธิ์เปิดฟอร์มหมดอายุ กรุณาคัดลอกข้อมูลที่กรอกไว้ แล้วเปิดฟอร์มด้วย PIN ใหม่");
+          const payload = {...applicantPayload(form), access_token: applyTicket};
           delete payload.data.consent;
           const { data, error } = await db.rpc("recruitment_apply", {
             p_payload: payload,

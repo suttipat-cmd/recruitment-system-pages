@@ -15,6 +15,7 @@ await db.exec(
     "utf8",
   ),
 );
+await db.exec(await readFile(new URL("../supabase/migrations/20261020105230_application_pin.sql",import.meta.url),"utf8"));
 const users = [
   "admin",
   "hr",
@@ -178,17 +179,16 @@ const server = await createServer({
               );
               await db.exec("set role " + (uid ? "authenticated" : "anon"));
               try {
-                const query =
-                  name === "recruitment_command"
+                const gateQuery = name === "recruitment_application_pin" ? "select public.recruitment_application_pin() data" : name === "recruitment_unlock_application" ? "select public.recruitment_unlock_application($1) data" : "";
+                const query = gateQuery || (name === "recruitment_command"
                     ? "select public.recruitment_command($1,$2) data"
                     : name === "recruitment_apply"
                       ? "select public.recruitment_apply($1) data"
                       : name === "recruitment_public_info"
                         ? "select public.recruitment_public_info() data"
-                        : "";
+                        : "");
                 if (!query) throw Error("Unknown RPC");
-                const params =
-                  name === "recruitment_command"
+                const params = name === "recruitment_unlock_application" ? [d.p_pin] : name === "recruitment_command"
                     ? [d.p_action, JSON.stringify(d.p_payload)]
                     : name === "recruitment_apply"
                       ? [JSON.stringify(d.p_payload)]
