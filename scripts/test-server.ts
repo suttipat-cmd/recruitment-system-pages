@@ -17,6 +17,7 @@ await db.exec(
 );
 await db.exec(await readFile(new URL("../supabase/migrations/20261020105230_application_pin.sql",import.meta.url),"utf8"));
 await db.exec(await readFile(new URL("../supabase/migrations/20261020111221_required_application_fields.sql",import.meta.url),"utf8"));
+await db.exec(await readFile(new URL("../supabase/migrations/20261020113344_hiring_workflow_v43.sql",import.meta.url),"utf8"));
 const users = [
   "admin",
   "hr",
@@ -63,8 +64,14 @@ for (const u of users) {
   );
 }
 await db.exec(
-  `update rm_private.settings set data='{"public_apply":true}';insert into rm_private.topics(title,category,position)values('พื้นฐานการทำงาน','GENERAL','DRIVER'),('ขับขี่ปลอดภัย','COACH','DRIVER'),('ความปลอดภัยก่อนเริ่มงาน','SAFETY','DRIVER');`,
+  `update rm_private.settings set data='{"public_apply":true}';insert into rm_private.topics(title,category,position)values('พื้นฐานการทำงาน','CUSTOMER','DRIVER'),('ขับขี่ปลอดภัย','PRACTICAL','DRIVER'),('ความปลอดภัยก่อนเริ่มงาน','LEGAL','DRIVER');`,
 );
+// Synthetic fixtures only, scoped to this in-memory harness.
+for (const [index,status] of ["INTERVIEW","HIRED","HIRED","STARTED"].entries()) {
+  const assigned=index>=2;
+  const seed={birth_date:"1990-01-01",national_id:"1234567890123",fuel_type:"รถไฟฟ้า",vehicle_type:"10W",license_type:"ท.3",driver_license_no:"TEST",forwarded_at:new Date().toISOString(),...(assigned?{plate:"ทดสอบ-001",fleet_type:"COMPANY"}:{})};
+  await db.query(`insert into rm_private.applicants(full_name,phone,position,original_unit,hiring_unit,status,owner_id,coach_id,supervisor_id,scheduled_start_date,actual_start_date,employment_status,data)values($1,$2,'DRIVER','TL-ขอนแก่น','TL-ขอนแก่น',$3,$4,$5,$6,case when $7 then current_date else null end,case when $8 then current_date else null end,case when $8 then 'ACTIVE' else 'PENDING' end,$9)`,["ทดสอบ "+["สัมภาษณ์","ส่งมอบ","นัดเริ่มงาน","อบรม"][index],"081111111"+index,status,users[2]!.id,assigned?users[3]!.id:null,assigned?users[2]!.id:null,index===3,index===3,JSON.stringify(seed)]);
+}
 let serial = Promise.resolve();
 const server = await createServer({
   configFile: false,

@@ -134,8 +134,9 @@ const note = (
   `<label class="full">${label}${required ? '<span class="req">*</span>' : ""}<textarea name="note" maxlength="5000" ${required ? "required" : ""}>${esc(value)}</textarea></label>`;
 function dataOf(form: HTMLFormElement): Row {
   const d = Object.fromEntries(new FormData(form));
-  for (const input of form.querySelectorAll<HTMLInputElement>("[data-date]"))
-    d[input.name] = isoDate(String(d[input.name] || ""));
+  for (const input of form.querySelectorAll<HTMLInputElement>("[data-date]")) {
+    if (!input.matches(":disabled")) d[input.name] = isoDate(String(d[input.name] || ""));
+  }
   return d;
 }
 function openModal(title: string, body: string, formId?: string) {
@@ -234,7 +235,7 @@ function shell(body: string) {
     ["guide", "วิธีใช้งาน"],
     ...(is("ADMIN") ? [["admin", "ตั้งค่าระบบ"]] : []),
   ];
-  root.innerHTML = `<div class="shell"><aside class="sidebar"><div class="brand">Recruitment<small>PEOPLE OPERATIONS · V4.2</small></div>${nav.map(([key, label]) => `<button type="button" data-nav="${key}" class="${screen === key ? "active" : ""}">${label}</button>`).join("")}<div class="bottom">${button("แบบฟอร์มสมัครงาน ↗", "apply")}<div class="profile">${esc(profile.display_name)}<small>${roles[profile.role]}</small></div><div class="actions">${button("รหัสผ่าน", "password")}${button("ออกจากระบบ", "logout")}</div></div></aside><main class="content">${body}</main></div>`;
+  root.innerHTML = `<div class="shell"><aside class="sidebar"><div class="brand">Recruitment<small>PEOPLE OPERATIONS · V4.3</small></div>${nav.map(([key, label]) => `<button type="button" data-nav="${key}" class="${screen === key ? "active" : ""}">${label}</button>`).join("")}<div class="bottom">${button("แบบฟอร์มสมัครงาน ↗", "apply")}<div class="profile">${esc(profile.display_name)}<small>${roles[profile.role]}</small></div><div class="actions">${button("รหัสผ่าน", "password")}${button("ออกจากระบบ", "logout")}</div></div></aside><main class="content">${body}</main></div>`;
 }
 function head(title: string, sub: string, actions = "") {
   return `<header class="topbar"><div><p class="section-label">Recruitment System</p><h1>${title}</h1><p class="muted" style="margin:8px 0 0">${sub}</p></div><div class="actions">${actions}${button("รีเฟรช", "refresh")}</div></header>`;
@@ -285,7 +286,7 @@ async function dashboard() {
       )
       .join(
         "",
-      )}</div><div class="split"><section class="card"><h2>เส้นทางรับคน</h2><div class="flow"><span>สมัครงาน</span>→<span>HR คัดกรอง</span>→<span>สัมภาษณ์</span>→<span>เริ่มงาน</span></div><p class="muted">หัวหน้างานยืนยันผล “ผ่าน” ถือว่ารับเข้าทำงานทันที ผลทดลองขับไม่บังคับ และ HR ผูกคำขอคนภายหลังได้</p>${is("ADMIN", "HR", "MANAGER") ? button("ดูผู้สมัครสำรอง", "reserves") : ""}</section><section class="card"><h2>ผู้เริ่มงานใน 90 วันล่าสุด</h2><small>นับวันเริ่มงานจริงตั้งแต่ ${date(retention([], today()).from)} ถึง ${date(today())}</small><strong style="display:block;font-size:32px;margin-top:12px">${r.rate === null ? "—" : r.rate + "%"}</strong><div class="progress"><i style="width:${Math.min(100, r.rate || 0)}%"></i></div><p>ยังทำงาน ${r.active} / เริ่มงาน ${r.total} คน · เป้าหมาย 90%</p><small>ผลอบรมเก็บแยก ไม่นำมาตัดสิน KPI นี้</small></section></div>${
+      )}</div><div class="split"><section class="card"><h2>เส้นทางรับคน</h2><div class="flow"><span>สมัครงาน</span>→<span>HR คัดกรอง</span>→<span>สัมภาษณ์</span>→<span>เริ่มงาน</span></div><p class="muted">หัวหน้างานยืนยันผล “ผ่าน” ถือว่ารับเข้าทำงานทันที Driver Coach บันทึกผลทดลองขับแยกภายหลัง และ HR ผูกคำขอคนได้</p>${is("ADMIN", "HR", "MANAGER") ? button("ดูผู้สมัครสำรอง", "reserves") : ""}</section><section class="card"><h2>ผู้เริ่มงานใน 90 วันล่าสุด</h2><small>นับวันเริ่มงานจริงตั้งแต่ ${date(retention([], today()).from)} ถึง ${date(today())}</small><strong style="display:block;font-size:32px;margin-top:12px">${r.rate === null ? "—" : r.rate + "%"}</strong><div class="progress"><i style="width:${Math.min(100, r.rate || 0)}%"></i></div><p>ยังทำงาน ${r.active} / เริ่มงาน ${r.total} คน · เป้าหมาย 90%</p><small>ผลอบรมเก็บแยก ไม่นำมาตัดสิน KPI นี้</small></section></div>${
       is("ADMIN", "HR", "MANAGER")
         ? `<section class="card"><h2>จัดหาคนขับภายใน 14 วัน</h2><div class="grid">${[
             ["อัตราคนขับ", k.total],
@@ -571,56 +572,24 @@ async function openApplicant(id: string) {
               current?.result,
             ),
             true,
-          )}${
-            a.position === "DRIVER"
-              ? select(
-                  "road_result",
-                  "ผลทดลองขับ (ไม่บังคับ)",
-                  opts(
-                    [
-                      { value: "PASS", label: "ผ่าน" },
-                      { value: "FAIL", label: "ไม่ผ่าน" },
-                    ],
-                    current?.road_result,
-                    "ไม่ได้ทดสอบ",
-                  ),
-                )
-              : ""
-          }${
-            a.position === "DRIVER"
-              ? select(
-                  "fuel",
-                  "ระบบเชื้อเพลิงที่ถนัด",
-                  opts(
-                    ["น้ำมัน", "แก๊ส", "น้ำมันและแก๊ส"].map((x) => ({
-                      value: x,
-                      label: x,
-                    })),
-                    current?.fuel,
-                  ),
-                )
-              : ""
-          }${note(current?.note)}</div><div class="actions"><button type="submit" name="mode" value="draft" formnovalidate>เก็บแบบร่าง</button><button type="submit" name="mode" value="submit" class="primary">ยืนยันผลสัมภาษณ์</button></div><p class="hint">ยืนยันผ่านแล้วรับเข้าทำงานทันที ไม่ต้องรอ HR ยืนยันซ้ำ</p><p class="error" data-error></p></form>`
+          )}<div class="full notice"><small>ประเภทเชื้อเพลิง (จากใบสมัคร)</small><br><b>${esc(a.data.fuel_type || "ยังไม่ระบุในใบสมัคร")}</b></div>${note(current?.note)}</div><div class="actions"><button type="submit" name="mode" value="draft" formnovalidate>เก็บแบบร่าง</button><button type="submit" name="mode" value="submit" class="primary">ยืนยันผลสัมภาษณ์</button></div><p class="hint">ยืนยันผ่านแล้วรับเข้าทำงานทันที ไม่ต้องรอ HR ยืนยันซ้ำ</p><p class="error" data-error></p></form>`
         : `<p class="muted" style="margin-top:15px">${a.owner_id ? "ผู้รับงาน: " + esc(person(a.owner_id)) : "รอหัวหน้างานในหน่วยงานนี้รับงาน"}</p>`
     }</section>`;
+  const handoverComplete = !!(a.coach_id && a.supervisor_id && a.data.plate && a.data.fleet_type);
   if (canHandover)
-    body += `<section class="card"><h2>ส่งมอบพนักงาน</h2><form id="handover"><div class="fields">${select("coach_id", "Driver Coach", peopleOpts("COACH", a.coach_id))}${select("supervisor_id", "หัวหน้างานผู้ดูแล", peopleOpts("MANAGER", a.supervisor_id, a.hiring_unit))}${field("plate", "ทะเบียนรถ", a.data.plate)}${select(
-      "fleet_type",
-      "ประเภทรถ",
-      opts(
-        [
-          { value: "COMPANY", label: "รถบริษัท" },
-          { value: "PARTNER", label: "รถร่วม" },
-        ],
-        a.data.fleet_type,
-      ),
-    )}${note()}</div><button type="submit" class="primary">บันทึกผู้ดูแล</button><p class="error" data-error></p></form></section><section class="card"><h2>เริ่มงาน / สถานะพนักงาน</h2><form id="employment"><div class="fields">${dates("scheduled_start_date", "กำหนดเริ่มงาน", a.scheduled_start_date)}${dates("actual_start_date", "วันเริ่มงานจริง", a.actual_start_date)}${dates("resignation_date", "วันลาออก", a.resignation_date)}${note("", false, "หมายเหตุ (บังคับเมื่อลาออก)")}</div><button type="submit" class="primary">บันทึกการทำงาน</button><p class="error" data-error></p></form></section>`;
+    body += `<section class="card"><h2>ส่งมอบพนักงาน</h2><p class="${handoverComplete ? "muted" : "notice warn"}">${handoverComplete ? "บันทึกผู้ดูแลแล้ว" : "กรอกข้อมูลส่งมอบให้ครบก่อนให้ HR กำหนดเริ่มงาน"}</p><form id="handover"><div class="fields">${select("coach_id", "Driver Coach", peopleOpts("COACH", a.coach_id),true)}${select("supervisor_id", "หัวหน้างานผู้ดูแล", peopleOpts("MANAGER", a.supervisor_id, a.hiring_unit),true)}${field("plate", "ทะเบียนรถ", a.data.plate,true)}${select("fleet_type","ประเภทรถ",opts([{value:"COMPANY",label:"รถบริษัท"},{value:"PARTNER",label:"รถร่วม"}],a.data.fleet_type),true)}${note()}</div><button type="submit" class="primary">บันทึกผู้ดูแล</button><p class="error" data-error></p></form></section>`;
+  if (hired && a.position === "DRIVER") {
+    body += `<section class="card"><h2>ผลทดลองขับโดย Driver Coach</h2><p class="muted">แยกจากผลสัมภาษณ์ บันทึกโดย Driver Coach ที่ได้รับมอบหมาย</p>${a.data.road_test_result ? `<p><b>${a.data.road_test_result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</b> · ${date(a.data.road_test_date)} · ${esc(person(a.data.road_test_by))}</p><p>${esc(a.data.road_test_note)}</p>` : '<p class="muted">ยังไม่ได้บันทึกผลทดลองขับ</p>'}${is("COACH") && a.coach_id === profile.id ? `<form id="road-test"><div class="fields">${select("result","ผลทดลองขับ",opts([{value:"PASS",label:"ผ่าน"},{value:"FAIL",label:"ไม่ผ่าน"}],a.data.road_test_result),true)}${dates("test_date","วันที่ทดลองขับ",a.data.road_test_date || today(),true)}${note(a.data.road_test_note)}</div><button class="primary" type="submit">บันทึกผลทดลองขับ</button><p class="error" data-error></p></form>` : ""}</section>`;
+  }
+  if (hired) {
+    body += `<section class="card"><h2>เริ่มงาน / สถานะพนักงาน</h2>${is("HR") ? `${!handoverComplete ? '<p class="notice warn">บันทึกส่งมอบพนักงานให้ครบก่อน</p>' : !a.scheduled_start_date ? '<p class="notice">บันทึกกำหนดเริ่มงานก่อน แล้วจึงกรอกวันเริ่มงานจริงได้</p>' : ''}<form id="employment"><fieldset class="workflow-fields" ${handoverComplete ? "" : "disabled"}><div class="fields">${dates("scheduled_start_date","กำหนดเริ่มงาน",a.scheduled_start_date,true)}${dates("actual_start_date","วันเริ่มงานจริง",a.actual_start_date).replace('data-date',`data-date ${a.scheduled_start_date || a.actual_start_date ? '' : 'disabled'}`)}${dates("resignation_date","วันลาออก",a.resignation_date).replace('data-date',`data-date ${a.actual_start_date ? '' : 'disabled'}`)}${note("",false,"หมายเหตุ (บังคับเมื่อลาออก)")}</div><div class="actions"><button type="submit" class="primary">บันทึกการทำงาน</button>${a.status === "HIRED" && a.scheduled_start_date && !a.actual_start_date ? `<button type="button" class="danger" data-action="no-show" ${a.scheduled_start_date > today() ? 'disabled title="บันทึกได้เมื่อถึงกำหนดเริ่มงาน"' : ''}>ไม่มาเริ่มงาน</button>` : ''}</div></fieldset><p class="error" data-error></p></form>` : `<p class="muted">ส่วนนี้บันทึกได้เฉพาะ HR</p><div class="keyvals"><div><small>กำหนดเริ่มงาน</small>${date(a.scheduled_start_date)}</div><div><small>วันเริ่มงานจริง</small>${date(a.actual_start_date)}</div></div>`}</section>`;
+  }
   if (a.status === "STARTED") {
     const allowed = topics.filter(
       (t) =>
         (!t.unit || t.unit === a.hiring_unit) &&
         (!t.position || t.position === a.position) &&
-        canTrain(profile.role, profile.units, a, profile.id, t.category),
+        Object.hasOwn(categories,t.category) && canTrain(profile.role, profile.units, a, profile.id, t.category),
     );
     body += `<section class="card"><h2>การอบรม</h2>${
       allowed.length
@@ -633,8 +602,8 @@ async function openApplicant(id: string) {
             ]),
             true,
           )}${note()}</div><button type="submit" class="primary">บันทึกอบรม</button><p class="error" data-error></p></form>`
-        : '<p class="muted">ยังไม่มีหัวข้อที่คุณบันทึกได้ หรือคุณไม่ได้รับมอบหมายให้ดูแลพนักงานนี้</p>'
-    }${button("+ เพิ่มหัวข้ออบรม", "new-topic")}<div class="table-wrap"><table><thead><tr><th>หัวข้อ</th><th>วันที่</th><th>ผล</th><th></th></tr></thead><tbody>${d.training.map((tr: Row) => `<tr><td>${esc(tr.title)}<br><small>${categories[tr.category]} · ${esc(tr.note)}</small></td><td>${date(tr.training_date)}</td><td>${tr.result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</td><td>${canTrain(profile.role, profile.units, a, profile.id, tr.category) ? `<button data-training="${tr.id}">แก้ไข</button>` : ""}</td></tr>`).join("")}</tbody></table></div></section>`;
+        : `<p class="muted">${is("HR","MANAGER") ? "ยังไม่มีหัวข้อประเภทใหม่ที่ตรงกับพนักงานนี้ กรุณาเพิ่มหัวข้ออบรม" : "บันทึกอบรมได้เฉพาะ HR และหัวหน้างานในหน่วยงาน"}</p>`
+    }${is("HR","MANAGER") ? button("+ เพิ่มหัวข้ออบรม", "new-topic") : ""}<div class="table-wrap"><table><thead><tr><th>หัวข้อ</th><th>วันที่</th><th>ผล</th><th></th></tr></thead><tbody>${d.training.map((tr: Row) => `<tr><td>${esc(tr.title)}<br><small>${categories[tr.category] || "ประเภทเดิม"} · ${esc(tr.note)}</small></td><td>${date(tr.training_date)}</td><td>${tr.result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</td><td>${Object.hasOwn(categories,tr.category) && canTrain(profile.role, profile.units, a, profile.id, tr.category) ? `<button data-training="${tr.id}">แก้ไข</button>` : ""}</td></tr>`).join("")}</tbody></table></div></section>`;
   }
   body += `<section class="card"><h2>ประวัติการดำเนินการ</h2>${d.activities.map((e: Row) => `<div class="timeline"><small>${date(e.created_at)} · ${esc(e.display_name || "ผู้สมัคร")}</small><p><b>${esc(actionLabel(e.action))}</b></p><p>${esc(e.note)}</p></div>`).join("")}</section></div><div><section class="card"><h2>ข้อมูลผู้สมัคร</h2><div class="keyvals">${Object.entries(
     values,
@@ -646,7 +615,7 @@ async function openApplicant(id: string) {
     )
     .join(
       "",
-    )}</div></section>${hired ? `<section class="card"><h2>ข้อมูลดูแลพนักงาน</h2><div class="keyvals"><div><small>Coach</small>${esc(person(a.coach_id))}</div><div><small>หัวหน้างาน</small>${esc(person(a.supervisor_id))}</div><div><small>ทะเบียน / รถ</small>${esc(a.data.plate || "—")} / ${fleet(a.data.fleet_type)}</div><div><small>เริ่มงานจริง</small>${date(a.actual_start_date)}</div><div><small>สถานะงาน</small>${a.employment_status === "RESIGNED" ? "ลาออก" : a.employment_status === "ACTIVE" ? "ทำงานอยู่" : "รอเริ่มงาน"}</div><div><small>ลาออก</small>${date(a.resignation_date)}</div></div></section>` : ""}${evals.length ? `<section class="card"><h2>ประวัติสัมภาษณ์</h2>${evals.map((e) => `<div class="slot"><b>รอบ ${e.round + 1} · ${e.stage === "DRAFT" ? "แบบร่าง" : e.result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</b><p>คะแนน ${e.score || "—"} · ทดลองขับ ${e.road_result || "ไม่ได้ทดสอบ"}</p><p>เชื้อเพลิง ${esc(e.fuel || "—")}</p><p>${esc(e.note)}</p><small>${esc(person(e.evaluator_id))} · ${date(e.updated_at)}</small></div>`).join("")}</section>` : ""}${attachmentsEnabled && is("ADMIN", "HR", "MANAGER") ? `<section class="card"><h2>เอกสารประกอบ</h2><p class="muted">PDF / JPG / PNG ไม่เกิน 5 MB ต่อไฟล์ เก็บในพื้นที่ส่วนตัว</p>${manage || ownManager ? '<form id="upload"><label>เลือกเอกสาร<span class="req">*</span><input type="file" name="file" accept="application/pdf,image/jpeg,image/png" required></label><button type="submit" style="margin-top:12px">อัปโหลดเอกสาร</button><p class="error" data-error></p></form>' : ""}${d.documents.map((doc: Row) => `<p><button data-document="${doc.id}">${esc(doc.title)} ↗</button></p>`).join("")}</section>` : ""}</div></div>`;
+    )}</div></section>${hired ? `<section class="card"><h2>ข้อมูลดูแลพนักงาน</h2><div class="keyvals"><div><small>Coach</small>${esc(person(a.coach_id))}</div><div><small>หัวหน้างาน</small>${esc(person(a.supervisor_id))}</div><div><small>ทะเบียน / รถ</small>${esc(a.data.plate || "—")} / ${fleet(a.data.fleet_type)}</div><div><small>เริ่มงานจริง</small>${date(a.actual_start_date)}</div><div><small>สถานะงาน</small>${a.employment_status === "RESIGNED" ? "ลาออก" : a.employment_status === "ACTIVE" ? "ทำงานอยู่" : "รอเริ่มงาน"}</div><div><small>ลาออก</small>${date(a.resignation_date)}</div></div></section>` : ""}${evals.length ? `<section class="card"><h2>ประวัติสัมภาษณ์</h2>${evals.map((e) => `<div class="slot"><b>รอบ ${e.round + 1} · ${e.stage === "DRAFT" ? "แบบร่าง" : e.result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</b><p>คะแนน ${e.score || "—"}</p><p>ประเภทเชื้อเพลิง ${esc(e.fuel || "—")}</p><p>${esc(e.note)}</p><small>${esc(person(e.evaluator_id))} · ${date(e.updated_at)}</small></div>`).join("")}</section>` : ""}${attachmentsEnabled && is("ADMIN", "HR", "MANAGER") ? `<section class="card"><h2>เอกสารประกอบ</h2><p class="muted">PDF / JPG / PNG ไม่เกิน 5 MB ต่อไฟล์ เก็บในพื้นที่ส่วนตัว</p>${manage || ownManager ? '<form id="upload"><label>เลือกเอกสาร<span class="req">*</span><input type="file" name="file" accept="application/pdf,image/jpeg,image/png" required></label><button type="submit" style="margin-top:12px">อัปโหลดเอกสาร</button><p class="error" data-error></p></form>' : ""}${d.documents.map((doc: Row) => `<p><button data-document="${doc.id}">${esc(doc.title)} ↗</button></p>`).join("")}</section>` : ""}</div></div>`;
   shell(body);
   dynamicRequirements();
 }
@@ -665,6 +634,8 @@ function actionLabel(a: string) {
         RECALL: "เรียกผู้สมัครกลับ",
         HANDOVER: "ส่งมอบผู้ดูแล",
         EMPLOYMENT: "ปรับสถานะการทำงาน",
+        NO_SHOW: "ไม่มาเริ่มงาน",
+        ROAD_TEST: "ผลทดลองขับโดย Driver Coach",
         TRAINING: "บันทึกอบรม",
         CONTACT: "บันทึกการติดต่อ",
         CLOSE: "ปิดเคส",
@@ -753,7 +724,7 @@ async function adminPage() {
         String(settings.public_apply || false),
       ),
       true,
-    )}${field("form_url", "Google Form เดิม", settings.form_url, false, "url")}${field("sheet_url", "Google Sheet เดิม", settings.sheet_url, false, "url")}${field("drive_url", "Google Drive เดิม", settings.drive_url, false, "url")}</div><div class="notice">แบบสมัครใหม่บันทึกเข้า Supabase โดยตรง ส่วนลิงก์ Google เดิมใช้เปิดตรวจข้อมูล ไม่ได้ซิงก์เข้าระบบใหม่อัตโนมัติ</div><button type="submit" class="primary">บันทึกตั้งค่า</button><p class="error" data-error></p></form></section><section class="card"><h2>หน่วยงาน</h2><div class="actions">${units.map((x) => `<span class="badge">${esc(x)}</span>`).join("")}</div><form id="unit" style="margin-top:20px">${field("name", "ชื่อหน่วยงานใหม่", "", true, "text", 'maxlength="120"')}<button type="submit" style="margin-top:12px">เพิ่มหน่วยงาน</button><p class="error" data-error></p></form><h2 style="margin-top:30px">หัวข้ออบรม</h2>${button("+ เพิ่มหัวข้ออบรม", "new-topic")}<p class="muted">หัวข้อแยกตำแหน่ง หน่วยงาน และประเภทผู้สอน</p><hr><h2>รีเซ็ตข้อมูลทดลอง</h2><p class="muted">ล้างใบสมัคร คำขอ ผลสัมภาษณ์ ผลอบรมและประวัติ คงบัญชี หน่วยงาน หัวข้ออบรมและตั้งค่าไว้ ต้องไม่มีเอกสารแนบ</p><div class="actions">${button("ดาวน์โหลดสำรองข้อมูล", "backup")}${button("ตรวจรายการก่อนรีเซ็ต", "reset-preview", "danger")}</div></section></div><section class="card"><h2>ประวัติระบบล่าสุด</h2><div class="table-wrap"><table><thead><tr><th>วันที่</th><th>ผู้ดำเนินการ</th><th>รายการ</th><th>บันทึก</th></tr></thead><tbody>${events.map((e) => `<tr><td>${date(e.created_at)}</td><td>${esc(e.display_name || "ผู้สมัคร")}</td><td>${esc(actionLabel(e.action))}</td><td>${esc(e.note)}</td></tr>`).join("")}</tbody></table></div></section>`
+    )}${field("form_url", "Google Form เดิม", settings.form_url, false, "url")}${field("sheet_url", "Google Sheet เดิม", settings.sheet_url, false, "url")}${field("drive_url", "Google Drive เดิม", settings.drive_url, false, "url")}</div><div class="notice">แบบสมัครใหม่บันทึกเข้า Supabase โดยตรง ส่วนลิงก์ Google เดิมใช้เปิดตรวจข้อมูล ไม่ได้ซิงก์เข้าระบบใหม่อัตโนมัติ</div><button type="submit" class="primary">บันทึกตั้งค่า</button><p class="error" data-error></p></form></section><section class="card"><h2>หน่วยงาน</h2><div class="actions">${units.map((x) => `<span class="badge">${esc(x)}</span>`).join("")}</div><form id="unit" style="margin-top:20px">${field("name", "ชื่อหน่วยงานใหม่", "", true, "text", 'maxlength="120"')}<button type="submit" style="margin-top:12px">เพิ่มหน่วยงาน</button><p class="error" data-error></p></form><h2 style="margin-top:30px">หัวข้ออบรม</h2>${is("HR","MANAGER") ? button("+ เพิ่มหัวข้ออบรม", "new-topic") : ""}<p class="muted">หัวข้อแยกตำแหน่ง หน่วยงาน และประเภทผู้สอน</p><hr><h2>รีเซ็ตข้อมูลทดลอง</h2><p class="muted">ล้างใบสมัคร คำขอ ผลสัมภาษณ์ ผลอบรมและประวัติ คงบัญชี หน่วยงาน หัวข้ออบรมและตั้งค่าไว้ ต้องไม่มีเอกสารแนบ</p><div class="actions">${button("ดาวน์โหลดสำรองข้อมูล", "backup")}${button("ตรวจรายการก่อนรีเซ็ต", "reset-preview", "danger")}</div></section></div><section class="card"><h2>ประวัติระบบล่าสุด</h2><div class="table-wrap"><table><thead><tr><th>วันที่</th><th>ผู้ดำเนินการ</th><th>รายการ</th><th>บันทึก</th></tr></thead><tbody>${events.map((e) => `<tr><td>${date(e.created_at)}</td><td>${esc(e.display_name || "ผู้สมัคร")}</td><td>${esc(actionLabel(e.action))}</td><td>${esc(e.note)}</td></tr>`).join("")}</tbody></table></div></section>`
   );
 }
 function guide() {
@@ -795,12 +766,8 @@ function profileModal(p?: Profile) {
   );
 }
 function topicModal() {
-  const cat =
-    profile.role === "COACH"
-      ? "COACH"
-      : ["SAFETY", "DRIVER_TRAINER"].includes(profile.role)
-        ? profile.role
-        : "GENERAL";
+  if (!is("HR","MANAGER")) throw Error("เฉพาะ HR และหัวหน้างาน");
+  const cat = "CUSTOMER";
   openModal(
     "เพิ่มหัวข้ออบรม",
     `<div class="fields">${field("title", "หัวข้อ", "", true, "text", 'maxlength="200"')}${select(
@@ -808,9 +775,6 @@ function topicModal() {
       "ประเภท",
       opts(
         Object.entries(categories)
-          .filter(
-            ([key]) => !is("COACH", "SAFETY", "DRIVER_TRAINER") || key === cat,
-          )
           .map(([value, label]) => ({ value, label })),
         cat,
       ),
@@ -986,6 +950,11 @@ async function clickAction(action: string) {
     );
     return;
   }
+  if (action === "no-show") {
+    if (!is("HR")) throw Error("เฉพาะ HR");
+    openModal("ไม่มาเริ่มงาน",`<p class="notice">กำหนดเริ่มงาน ${date(a.scheduled_start_date)} · ระบบจะปลดคำขอคนที่ผูกไว้</p><div class="fields">${note("",true,"เหตุผล / รายละเอียดที่ติดต่อผู้สมัคร")}</div>`,"no-show");
+    return;
+  }
   if (action === "contact") {
     openModal(
       "บันทึกการติดต่อ",
@@ -1029,7 +998,6 @@ async function clickAction(action: string) {
         "สถานะ",
         opts([
           { value: "WITHDRAWN", label: "ถอนตัว" },
-          { value: "NO_SHOW", label: "ไม่มาเริ่มงาน" },
           { value: "CANCELLED", label: "ยกเลิกรับ" },
         ]),
         true,
@@ -1287,6 +1255,12 @@ document.addEventListener("submit", (e) => {
           await runAction("interview", { ...d, submit });
           break;
         }
+        case "road-test":
+          await runAction("road_test",d);
+          break;
+        case "no-show":
+          await runAction("no_show",d);
+          break;
         case "handover":
         case "employment":
         case "contact":

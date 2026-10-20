@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 const ids = {
+  peer: "10000000-0000-4000-8000-000000000009",
   admin: "10000000-0000-4000-8000-000000000001",
   hr: "10000000-0000-4000-8000-000000000002",
   mgr: "10000000-0000-4000-8000-000000000003",
@@ -25,6 +26,7 @@ const app = (name = "ทดสอบ ระบบ", phone = "0812345678") => ({
     vehicle_type: "10W",
     license_type: "ท.3",
     driver_license_no: "12345",
+    fuel_type: "รถไฟฟ้า",id_issued_at:"2020-01-01",id_expires_at:"2030-01-01",current_job_status:"ว่างงาน",available_start_date:"2026-11-01",cargo_types:"วัสดุก่อสร้าง",other_cargo_note:"ไม่มี",
   },
 });
 test("Postgres migration + complete workflows and authorization", async (t) => {
@@ -41,6 +43,7 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
       "utf8",
     ),
   );
+  for (const file of ["20261020105230_application_pin.sql","20261020111221_required_application_fields.sql","20261020113344_hiring_workflow_v43.sql"]) await db.exec(await readFile(new URL("../supabase/migrations/"+file,import.meta.url),"utf8"));
   for (const [key, id] of Object.entries(ids)) {
     await db.query("insert into auth.users values($1,$2)", [
       id,
@@ -54,6 +57,7 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
         key,
         (
           {
+            peer: "MANAGER",
             admin: "ADMIN",
             hr: "HR",
             mgr: "MANAGER",
@@ -208,7 +212,7 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
     },
   );
   await t.test(
-    "screen, claim and optional road test: confirmed PASS hires immediately and fills slot",
+    "screen and interview use application fuel; PASS hires immediately and fills slot",
     async () => {
       await mutate("hr", "match", aId, { slot_id: slotId });
       await mutate("hr", "screen", aId, { result: "FORWARD" });
@@ -229,6 +233,8 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
         submit: true,
       });
       assert.equal((await get(aId)).status, "HIRED");
+      assert.equal((await cmd("mgr","detail",{id:aId})).evaluations[0].fuel,"รถไฟฟ้า");
+      assert.equal((await cmd("mgr","detail",{id:aId})).evaluations[0].road_result,null);
       assert.equal(
         (await cmd("hr", "requests"))[0].slots.find((s: any) => s.id === slotId)
           .status,
@@ -240,6 +246,8 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
     },
   );
   await t.test("handover, employment and role-scoped training", async () => {
+    await assert.rejects(()=>mutate("hr","employment",aId,{scheduled_start_date:"2026-10-20"}));
+    await assert.rejects(()=>mutate("hr","handover",aId,{coach_id:ids.coach}));
     await mutate("hr", "handover", aId, {
       coach_id: ids.coach,
       supervisor_id: ids.mgr,
@@ -250,49 +258,23 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
       "select to_char((now() at time zone 'Asia/Bangkok')::date,'YYYY-MM-DD') today",
     );
     const day = rows[0]!.today;
-    await mutate("hr", "employment", aId, {
-      actual_start_date: day,
-      scheduled_start_date: day,
-    });
-    await cmd("coach", "save_topic", {
-      title: "สอนขับ",
-      category: "COACH",
-      position: "DRIVER",
-      unit,
-    });
-    await cmd("safety", "save_topic", {
-      title: "ความปลอดภัย",
-      category: "SAFETY",
-      position: "DRIVER",
-      unit,
-    });
+    await assert.rejects(()=>mutate("mgr","employment",aId,{scheduled_start_date:day}));
+    await assert.rejects(()=>mutate("admin","employment",aId,{scheduled_start_date:day}));
+    await assert.rejects(()=>mutate("hr","employment",aId,{actual_start_date:day,scheduled_start_date:day}));
+    await mutate("hr","employment",aId,{scheduled_start_date:day});
+    await mutate("hr","employment",aId,{actual_start_date:day,scheduled_start_date:day});
+    await assert.rejects(()=>mutate("hr","road_test",aId,{result:"PASS",test_date:day}));
+    await mutate("coach","road_test",aId,{result:"FAIL",test_date:day,note:"ทดลองฝึก"});
+    assert.equal((await get(aId)).status,"STARTED");
+    assert.equal((await get(aId)).data.road_test_result,"FAIL");
+    await cmd("hr", "save_topic", {title:"ทักษะขับรถ",category:"PRACTICAL",position:"DRIVER",unit});
+    await cmd("mgr", "save_topic", {title:"ข้อกำหนดกฎหมาย",category:"LEGAL",position:"DRIVER",unit});
+    await assert.rejects(()=>cmd("coach","save_topic",{title:"เดิม",category:"COACH",unit}));
     const topics = (await cmd("hr", "snapshot")).topics;
-    const coachTopic = topics.find((x: any) => x.category === "COACH").id;
-    const safetyTopic = topics.find((x: any) => x.category === "SAFETY").id;
-    await mutate("coach", "training", aId, {
-      topic_id: coachTopic,
-      training_date: day,
-      result: "PASS",
-    });
-    await assert.rejects(() =>
-      mutate("coach", "training", aId, {
-        topic_id: safetyTopic,
-        training_date: day,
-        result: "PASS",
-      }),
-    );
-    await assert.rejects(() =>
-      mutate("other", "training", aId, {
-        topic_id: safetyTopic,
-        training_date: day,
-        result: "PASS",
-      }),
-    );
-    await mutate("safety", "training", aId, {
-      topic_id: safetyTopic,
-      training_date: day,
-      result: "FAIL",
-    });
+    const topicId=topics.find((x:any)=>x.category==='PRACTICAL').id;
+    for(const who of ['coach','safety','trainer','dispatch','admin','other'] as const) await assert.rejects(()=>mutate(who,"training",aId,{topic_id:topicId,training_date:day,result:"PASS"}));
+    await mutate("peer","training",aId,{topic_id:topicId,training_date:day,result:"PASS"});
+    await mutate("hr","training",aId,{topic_id:topicId,training_date:day,result:"FAIL"});
     assert.equal(
       (await cmd("coach", "detail", { id: aId })).applicant.data.national_id,
       undefined,
@@ -335,6 +317,28 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
       assert.equal(detail.evaluations[0].stage, "DRAFT");
     },
   );
+  await t.test("HR-only scheduled start and no-show release the staffing slot",async()=>{
+    const id=(await cmd("hr","create_applicant",app("ไม่มา เริ่มงาน","0833333333"))).id;
+    const day=(await db.query<{as_of:string}>("select to_char((now() at time zone 'Asia/Bangkok')::date,'YYYY-MM-DD') as as_of")).rows[0]!.as_of;
+    await assert.rejects(()=>mutate("hr","employment",id,{scheduled_start_date:day}));
+    await mutate("hr","screen",id,{result:"FORWARD",duplicate_note:"ทดสอบรายใหม่"});
+    await mutate("mgr","claim",id);
+    await mutate("mgr","interview",id,{score:4,result:"PASS",road_result:"FAIL",fuel:"forged",submit:true});
+    await assert.rejects(()=>mutate("coach","road_test",id,{result:"PASS",test_date:day}));
+    await mutate("hr","match",id,{slot_id:slotId});
+    const slot=req.slots.find((x:any)=>x.id===slotId);
+    await mutate("hr","handover",id,{coach_id:ids.coach,supervisor_id:ids.mgr,plate:slot.plate,fleet_type:slot.fleet_type});
+    await mutate("hr","employment",id,{scheduled_start_date:"2099-01-01"});
+    await assert.rejects(()=>mutate("hr","no_show",id,{note:"ยังไม่ถึงวัน"}));
+    await mutate("hr","employment",id,{scheduled_start_date:day});
+    await assert.rejects(()=>mutate("admin","no_show",id,{note:"ไม่มา"}));
+    await assert.rejects(()=>mutate("hr","close",id,{result:"NO_SHOW",note:"ข้ามโฟลว"}));
+    await assert.rejects(()=>mutate("hr","no_show",id,{}));
+    await mutate("hr","no_show",id,{note:"ติดต่อแล้วไม่มา"});
+    assert.equal((await get(id)).status,"NO_SHOW");
+    assert.equal((await cmd("hr","requests"))[0].slots.find((x:any)=>x.id===slotId).status,"OPEN");
+    await assert.rejects(()=>mutate("hr","employment",id,{actual_start_date:day}));
+  });
   await t.test(
     "live profile deactivation, self-demotion guard and public submission gating",
     async () => {
@@ -354,7 +358,9 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
         sheet_url: "",
         drive_url: "",
       });
-      const payload = app("ออนไลน์ ทดสอบ", "0822222222");
+      const pin=(await as("hr","select public.recruitment_application_pin() data")).rows[0] as any;
+      const ticket=(await as(null,"select public.recruitment_unlock_application($1) data",[pin.data.pin])).rows[0] as any;
+      const payload = {...app("ออนไลน์ ทดสอบ", "0822222222"),access_token:ticket.data.token};
       const r = await as(null, "select public.recruitment_apply($1) data", [
         JSON.stringify(payload),
       ]);

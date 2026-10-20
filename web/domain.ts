@@ -20,11 +20,10 @@ export const statuses: Record<string, string> = {
   NO_SHOW: "ไม่มาเริ่มงาน",
   CANCELLED: "ยกเลิกรับ",
 };
-export const categories: Record<string, string> = {
-  GENERAL: "ทั่วไป",
-  COACH: "Driver Coach",
-  SAFETY: "Safety",
-  DRIVER_TRAINER: "Driver Trainer",
+export const categories: Record<string,string> = {
+  CUSTOMER: "ข้อกำหนดของลูกค้า",
+  PRACTICAL: "ทักษะการปฏิบัติ",
+  LEGAL: "ตามกฎหมาย",
 };
 export function esc(value: unknown): string {
   return String(value ?? "").replace(
@@ -98,10 +97,7 @@ export function canTrain(
   userId: string,
   category: string,
 ) {
-  if (["ADMIN", "HR", "DISPATCH_MANAGER"].includes(role)) return true;
-  if (role === "MANAGER") return units.includes(app.hiring_unit);
-  if (role === "COACH") return app.coach_id === userId && category === "COACH";
-  return role === category && ["SAFETY", "DRIVER_TRAINER"].includes(role);
+  return role === "HR" || (role === "MANAGER" && units.includes(app.hiring_unit));
 }
 export interface Profile {
   id: string;
