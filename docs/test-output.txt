@@ -1,0 +1,32 @@
+
+> recruitment-system@4.0.0 test
+> node --import tsx --test tests/*.test.ts
+
+▶ Postgres migration + complete workflows and authorization
+  ✔ all private tables have RLS and deny direct access; anon cannot bypass fixed public entrypoint (7.7465ms)
+  ✔ HR creates application without a request; manager cannot see unscreened application (7.630833ms)
+  ✔ request has multiple plates and separate driver/helper slots; HR receives once (8.293709ms)
+  ✔ unit change atomically releases slot, preserves original unit, increments version (8.402416ms)
+  ✔ screen, claim and optional road test: confirmed PASS hires immediately and fills slot (25.40525ms)
+  ✔ handover, employment and role-scoped training (16.085916ms)
+  ✔ reserve recalls preserve submitted evaluation in a new draft round (9.840125ms)
+  ✔ live profile deactivation, self-demotion guard and public submission gating (4.192959ms)
+  ✔ document policies deny cross-user upload paths and redact sensitive profile data (3.679834ms)
+  ✔ reset requires admin, explicit confirmation, unchanged plan, and preserves accounts/topics (12.278458ms)
+✔ Postgres migration + complete workflows and authorization (776.107125ms)
+✔ dates display Gregorian dd/mm/yyyy and reject impossible dates (1.051917ms)
+✔ retention cohort includes first day and excludes day 91 and future starts (8.641834ms)
+✔ coach and manager scopes are distinct; generated HTML escapes user input (0.119917ms)
+✔ Select uses real SDK with explicit columns, ordering and bounded limit (11.416292ms)
+✔ Insert sends a trimmed title and returns the inserted row (0.853ms)
+✔ Invalid input never reaches Supabase (1.246291ms)
+✔ RLS denial remains a denial; response does not expose provider error details (0.347333ms)
+✔ Bad config and privileged keys are rejected before network access (0.138916ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 946.089958
