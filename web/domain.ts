@@ -1,11 +1,8 @@
 export const roles = {
   ADMIN: "Admin",
   HR: "HR",
-  MANAGER: "หัวหน้างาน",
+  MANAGER: "Supervisor",
   COACH: "Driver Coach",
-  SAFETY: "Safety",
-  DISPATCH_MANAGER: "ผู้จัดการจัดส่ง",
-  DRIVER_TRAINER: "Driver Trainer",
 } as const;
 export type Role = keyof typeof roles;
 export const statuses: Record<string, string> = {
@@ -96,8 +93,9 @@ export function canTrain(
   app: { hiring_unit: string; coach_id: string | null },
   userId: string,
   category: string,
+  allUnits = false,
 ) {
-  return role === "HR" || (role === "MANAGER" && units.includes(app.hiring_unit));
+  return role === "HR" || (role === "MANAGER" && (allUnits || units.includes(app.hiring_unit)));
 }
 export interface Profile {
   id: string;
@@ -105,6 +103,7 @@ export interface Profile {
   display_name: string;
   role: Role;
   units: string[];
+  all_units: boolean;
   active: boolean;
   version: number;
 }

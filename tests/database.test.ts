@@ -43,12 +43,13 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
       "utf8",
     ),
   );
-  for (const file of ["20261020105230_application_pin.sql","20261020111221_required_application_fields.sql","20261020113344_hiring_workflow_v43.sql"]) await db.exec(await readFile(new URL("../supabase/migrations/"+file,import.meta.url),"utf8"));
+  for (const file of ["20261020105230_application_pin.sql","20261020111221_required_application_fields.sql","20261020113344_hiring_workflow_v43.sql","20261020120123_four_roles_and_request_types.sql"]) await db.exec(await readFile(new URL("../supabase/migrations/"+file,import.meta.url),"utf8"));
   for (const [key, id] of Object.entries(ids)) {
     await db.query("insert into auth.users values($1,$2)", [
       id,
       key + "@test.invalid",
     ]);
+    if (["safety","trainer","dispatch"].includes(key)) continue;
     await db.query(
       "insert into rm_private.profiles(id,email,display_name,role,units) values($1,$2,$3,$4,$5)",
       [
@@ -144,6 +145,37 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
       );
     },
   );
+  await t.test("only four roles; Supervisor scope is enforced on reads and writes",async()=>{
+    for(const role of ["SAFETY","DRIVER_TRAINER","DISPATCH_MANAGER"]) await assert.rejects(()=>cmd("admin","save_profile",{email:"safety@test.invalid",display_name:"retired",role,units:[],active:true}));
+    assert.deepEqual((await cmd("mgr","snapshot")).units,[unit]);
+    await assert.rejects(()=>cmd("mgr","create_request",{title:"ข้อความอิสระ",unit,lines:[{plate:"TEST",fleet_type:"COMPANY",position:"DRIVER"}]}));
+    const id=(await cmd("hr","create_applicant",{...app("ต่างหน่วยงาน","0844444444"),data:{...app().data,national_id:"9876543210123"},unit:otherUnit})).id;
+    await mutate("hr","screen",id,{result:"FORWARD"});
+    await assert.rejects(()=>cmd("mgr","detail",{id}));
+    assert.equal((await cmd("mgr","applicants",{unit:otherUnit})).total,0);
+    await assert.rejects(()=>mutate("mgr","claim",id));
+    const full={email:"mgr@test.invalid",display_name:"Supervisor",role:"MANAGER",units:[],active:true,all_units:true};
+    const own=await cmd("mgr","snapshot");
+    await assert.rejects(()=>cmd("mgr","save_profile",{...full,version:own.profile.version}));
+    await cmd("admin","save_profile",{...full,version:own.profile.version});
+    assert.equal((await cmd("mgr","snapshot")).profile.all_units,true);
+    assert.ok((await cmd("mgr","snapshot")).units.includes(otherUnit));
+    assert.ok((await cmd("mgr","detail",{id})).applicant);
+    await mutate("mgr","claim",id);
+    await mutate("mgr","interview",id,{score:4,result:"PASS",submit:true});
+    await cmd("mgr","create_request",{title:"ทดแทนอัตรากำลังเดิม",unit:otherUnit,lines:[{plate:"ทดสอบ",fleet_type:"COMPANY",position:"DRIVER"}]});
+    assert.ok((await cmd("mgr","requests")).some((r:any)=>r.unit===otherUnit));
+    await cmd("mgr","save_topic",{title:"ต่างหน่วย",category:"LEGAL",unit:otherUnit});
+    await mutate("mgr","handover",id,{coach_id:ids.coach,supervisor_id:ids.mgr,plate:"ทดสอบ",fleet_type:"COMPANY"});
+
+    const v=(await cmd("mgr","snapshot")).profile.version;
+    await cmd("admin","save_profile",{...full,units:[unit],all_units:false,version:v});
+    await assert.rejects(()=>cmd("mgr","detail",{id}));
+    assert.ok((await cmd("mgr","requests")).every((r:any)=>r.unit===unit));
+    await assert.rejects(()=>mutate("mgr","handover",id,{}));
+    await assert.rejects(()=>cmd("mgr","save_topic",{title:"ห้าม",category:"LEGAL",unit:otherUnit}));
+    await assert.rejects(async()=>cmd("admin","save_profile",{email:"coach@test.invalid",display_name:"Coach",role:"COACH",units:[],active:true,all_units:true,version:(await cmd("coach","snapshot")).profile.version}));
+  });
   await t.test(
     "HR creates application without a request; manager cannot see unscreened application",
     async () => {
@@ -158,7 +190,7 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
     async () => {
       const id = (
         await cmd("mgr", "create_request", {
-          title: "รถเพิ่ม",
+          title: "ขออัตรากำลังเพิ่ม",
           unit,
           lines: [
             { plate: "กข 123", fleet_type: "COMPANY", position: "DRIVER" },
@@ -178,7 +210,7 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
       await assert.rejects(() =>
         cmd("hr", "receive_request", { id, version: 1 }),
       );
-      req = (await cmd("hr", "requests"))[0];
+      req = (await cmd("hr", "requests")).find((r:any)=>r.unit===unit);
       slotId = req.slots.find((s: any) => s.position === "DRIVER").id;
       await mutate("hr", "match", aId, { slot_id: slotId });
     },
@@ -198,7 +230,7 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
       assert.equal(b.original_unit, unit);
       assert.equal(b.hiring_unit, otherUnit);
       assert.equal(
-        (await cmd("hr", "requests"))[0].slots.find((s: any) => s.id === slotId)
+        (await cmd("hr", "requests")).find((r:any)=>r.unit===unit).slots.find((s: any) => s.id === slotId)
           .status,
         "OPEN",
       );
@@ -236,7 +268,7 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
       assert.equal((await cmd("mgr","detail",{id:aId})).evaluations[0].fuel,"รถไฟฟ้า");
       assert.equal((await cmd("mgr","detail",{id:aId})).evaluations[0].road_result,null);
       assert.equal(
-        (await cmd("hr", "requests"))[0].slots.find((s: any) => s.id === slotId)
+        (await cmd("hr", "requests")).find((r:any)=>r.unit===unit).slots.find((s: any) => s.id === slotId)
           .status,
         "FILLED",
       );

@@ -18,14 +18,12 @@ await db.exec(
 await db.exec(await readFile(new URL("../supabase/migrations/20261020105230_application_pin.sql",import.meta.url),"utf8"));
 await db.exec(await readFile(new URL("../supabase/migrations/20261020111221_required_application_fields.sql",import.meta.url),"utf8"));
 await db.exec(await readFile(new URL("../supabase/migrations/20261020113344_hiring_workflow_v43.sql",import.meta.url),"utf8"));
+await db.exec(await readFile(new URL("../supabase/migrations/20261020120123_four_roles_and_request_types.sql",import.meta.url),"utf8"));
 const users = [
   "admin",
   "hr",
   "manager",
   "coach",
-  "safety",
-  "trainer",
-  "dispatch",
 ].map((name, index) => ({
   id: `20000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
   name,
@@ -35,9 +33,6 @@ const users = [
     "HR",
     "MANAGER",
     "COACH",
-    "SAFETY",
-    "DRIVER_TRAINER",
-    "DISPATCH_MANAGER",
   ][index]!,
 }));
 for (const u of users) {

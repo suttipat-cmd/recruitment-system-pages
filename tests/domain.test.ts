@@ -43,7 +43,8 @@ test("coach and manager scopes are distinct; generated HTML escapes user input",
   assert.equal(canTrain("COACH", [], a, "two", "COACH"), false);
   assert.equal(canTrain("COACH", [], a, "one", "SAFETY"), false);
   assert.equal(canTrain("MANAGER", ["B"], a, "x", "GENERAL"), false);
-  assert.equal(canTrain("SAFETY", [], a, "x", "LEGAL"), false);
+  assert.equal(canTrain("ADMIN", [], a, "x", "LEGAL"), false);
+  assert.equal(canTrain("MANAGER", ["B"], a, "x", "LEGAL",true), true);
   assert.equal(canTrain("MANAGER", ["A"], a, "x", "LEGAL"), true);
   assert.equal(canTrain("HR", [], a, "x", "CUSTOMER"), true);
   assert.equal(esc("<script>"), "&lt;script&gt;");

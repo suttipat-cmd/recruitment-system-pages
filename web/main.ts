@@ -60,7 +60,7 @@ const unitOpts = (selected: unknown = "", list = units) =>
 const peopleOpts = (role: string, selected: unknown = "", unit?: string) =>
   opts(
     people
-      .filter((x) => x.role === role && (!unit || x.units.includes(unit)))
+      .filter((x) => x.role === role && (!unit || x.all_units || x.units.includes(unit)))
       .map((x) => ({ value: x.id, label: x.display_name })),
     selected,
     "ยังไม่กำหนด",
@@ -235,7 +235,7 @@ function shell(body: string) {
     ["guide", "วิธีใช้งาน"],
     ...(is("ADMIN") ? [["admin", "ตั้งค่าระบบ"]] : []),
   ];
-  root.innerHTML = `<div class="shell"><aside class="sidebar"><div class="brand">Recruitment<small>PEOPLE OPERATIONS · V4.3</small></div>${nav.map(([key, label]) => `<button type="button" data-nav="${key}" class="${screen === key ? "active" : ""}">${label}</button>`).join("")}<div class="bottom">${button("แบบฟอร์มสมัครงาน ↗", "apply")}<div class="profile">${esc(profile.display_name)}<small>${roles[profile.role]}</small></div><div class="actions">${button("รหัสผ่าน", "password")}${button("ออกจากระบบ", "logout")}</div></div></aside><main class="content">${body}</main></div>`;
+  root.innerHTML = `<div class="shell"><aside class="sidebar"><div class="brand">Recruitment<small>PEOPLE OPERATIONS · V4.4</small></div>${nav.map(([key, label]) => `<button type="button" data-nav="${key}" class="${screen === key ? "active" : ""}">${label}</button>`).join("")}<div class="bottom">${button("แบบฟอร์มสมัครงาน ↗", "apply")}<div class="profile">${esc(profile.display_name)}<small>${roles[profile.role]}</small></div><div class="actions">${button("รหัสผ่าน", "password")}${button("ออกจากระบบ", "logout")}</div></div></aside><main class="content">${body}</main></div>`;
 }
 function head(title: string, sub: string, actions = "") {
   return `<header class="topbar"><div><p class="section-label">Recruitment System</p><h1>${title}</h1><p class="muted" style="margin:8px 0 0">${sub}</p></div><div class="actions">${actions}${button("รีเฟรช", "refresh")}</div></header>`;
@@ -286,7 +286,7 @@ async function dashboard() {
       )
       .join(
         "",
-      )}</div><div class="split"><section class="card"><h2>เส้นทางรับคน</h2><div class="flow"><span>สมัครงาน</span>→<span>HR คัดกรอง</span>→<span>สัมภาษณ์</span>→<span>เริ่มงาน</span></div><p class="muted">หัวหน้างานยืนยันผล “ผ่าน” ถือว่ารับเข้าทำงานทันที Driver Coach บันทึกผลทดลองขับแยกภายหลัง และ HR ผูกคำขอคนได้</p>${is("ADMIN", "HR", "MANAGER") ? button("ดูผู้สมัครสำรอง", "reserves") : ""}</section><section class="card"><h2>ผู้เริ่มงานใน 90 วันล่าสุด</h2><small>นับวันเริ่มงานจริงตั้งแต่ ${date(retention([], today()).from)} ถึง ${date(today())}</small><strong style="display:block;font-size:32px;margin-top:12px">${r.rate === null ? "—" : r.rate + "%"}</strong><div class="progress"><i style="width:${Math.min(100, r.rate || 0)}%"></i></div><p>ยังทำงาน ${r.active} / เริ่มงาน ${r.total} คน · เป้าหมาย 90%</p><small>ผลอบรมเก็บแยก ไม่นำมาตัดสิน KPI นี้</small></section></div>${
+      )}</div><div class="split"><section class="card"><h2>เส้นทางรับคน</h2><div class="flow"><span>สมัครงาน</span>→<span>HR คัดกรอง</span>→<span>สัมภาษณ์</span>→<span>เริ่มงาน</span></div><p class="muted">Supervisor ยืนยันผล “ผ่าน” ถือว่ารับเข้าทำงานทันที Driver Coach บันทึกผลทดลองขับแยกภายหลัง และ HR ผูกคำขอคนได้</p>${is("ADMIN", "HR", "MANAGER") ? button("ดูผู้สมัครสำรอง", "reserves") : ""}</section><section class="card"><h2>ผู้เริ่มงานใน 90 วันล่าสุด</h2><small>นับวันเริ่มงานจริงตั้งแต่ ${date(retention([], today()).from)} ถึง ${date(today())}</small><strong style="display:block;font-size:32px;margin-top:12px">${r.rate === null ? "—" : r.rate + "%"}</strong><div class="progress"><i style="width:${Math.min(100, r.rate || 0)}%"></i></div><p>ยังทำงาน ${r.active} / เริ่มงาน ${r.total} คน · เป้าหมาย 90%</p><small>ผลอบรมเก็บแยก ไม่นำมาตัดสิน KPI นี้</small></section></div>${
       is("ADMIN", "HR", "MANAGER")
         ? `<section class="card"><h2>จัดหาคนขับภายใน 14 วัน</h2><div class="grid">${[
             ["อัตราคนขับ", k.total],
@@ -300,7 +300,7 @@ async function dashboard() {
             )
             .join(
               "",
-            )}</div><p class="muted">เริ่มนับเมื่อ HR รับเรื่อง จบเมื่อหัวหน้างานยืนยันผ่าน นับคนขับ 1 คน = 1 อัตรา เด็กติดรถแยกติดตามและไม่นับ KPI นี้</p>${button("ดูคำขอคน", "requests")}</section>`
+            )}</div><p class="muted">เริ่มนับเมื่อ HR รับเรื่อง จบเมื่อ Supervisor ยืนยันผ่าน นับคนขับ 1 คน = 1 อัตรา เด็กติดรถแยกติดตามและไม่นับ KPI นี้</p>${button("ดูคำขอคน", "requests")}</section>`
         : ""
     }`
   );
@@ -475,12 +475,12 @@ async function openApplicant(id: string) {
   detail = d;
   const a = d.applicant as Applicant;
   const manage = is("ADMIN", "HR");
-  const ownManager = is("MANAGER") && profile.units.includes(a.hiring_unit);
+  const ownManager = is("MANAGER") && (profile.all_units || profile.units.includes(a.hiring_unit));
   const owner = ownManager && a.owner_id === profile.id;
   const hired = ["HIRED", "STARTED"].includes(a.status);
   const evals = d.evaluations as Row[];
   const current = evals.find((e) => e.round === a.round);
-  const canHandover = (manage || ownManager || is("DISPATCH_MANAGER")) && hired;
+  const canHandover = (manage || ownManager) && hired;
   const actions = [
     manage ? button("แก้ข้อมูล / หน่วยงาน", "edit-applicant") : "",
     manage ? button("บันทึกติดต่อ", "contact") : "",
@@ -573,11 +573,11 @@ async function openApplicant(id: string) {
             ),
             true,
           )}<div class="full notice"><small>ประเภทเชื้อเพลิง (จากใบสมัคร)</small><br><b>${esc(a.data.fuel_type || "ยังไม่ระบุในใบสมัคร")}</b></div>${note(current?.note)}</div><div class="actions"><button type="submit" name="mode" value="draft" formnovalidate>เก็บแบบร่าง</button><button type="submit" name="mode" value="submit" class="primary">ยืนยันผลสัมภาษณ์</button></div><p class="hint">ยืนยันผ่านแล้วรับเข้าทำงานทันที ไม่ต้องรอ HR ยืนยันซ้ำ</p><p class="error" data-error></p></form>`
-        : `<p class="muted" style="margin-top:15px">${a.owner_id ? "ผู้รับงาน: " + esc(person(a.owner_id)) : "รอหัวหน้างานในหน่วยงานนี้รับงาน"}</p>`
+        : `<p class="muted" style="margin-top:15px">${a.owner_id ? "ผู้รับงาน: " + esc(person(a.owner_id)) : "รอ Supervisor ในหน่วยงานนี้รับงาน"}</p>`
     }</section>`;
   const handoverComplete = !!(a.coach_id && a.supervisor_id && a.data.plate && a.data.fleet_type);
   if (canHandover)
-    body += `<section class="card"><h2>ส่งมอบพนักงาน</h2><p class="${handoverComplete ? "muted" : "notice warn"}">${handoverComplete ? "บันทึกผู้ดูแลแล้ว" : "กรอกข้อมูลส่งมอบให้ครบก่อนให้ HR กำหนดเริ่มงาน"}</p><form id="handover"><div class="fields">${select("coach_id", "Driver Coach", peopleOpts("COACH", a.coach_id),true)}${select("supervisor_id", "หัวหน้างานผู้ดูแล", peopleOpts("MANAGER", a.supervisor_id, a.hiring_unit),true)}${field("plate", "ทะเบียนรถ", a.data.plate,true)}${select("fleet_type","ประเภทรถ",opts([{value:"COMPANY",label:"รถบริษัท"},{value:"PARTNER",label:"รถร่วม"}],a.data.fleet_type),true)}${note()}</div><button type="submit" class="primary">บันทึกผู้ดูแล</button><p class="error" data-error></p></form></section>`;
+    body += `<section class="card"><h2>ส่งมอบพนักงาน</h2><p class="${handoverComplete ? "muted" : "notice warn"}">${handoverComplete ? "บันทึกผู้ดูแลแล้ว" : "กรอกข้อมูลส่งมอบให้ครบก่อนให้ HR กำหนดเริ่มงาน"}</p><form id="handover"><div class="fields">${select("coach_id", "Driver Coach", peopleOpts("COACH", a.coach_id),true)}${select("supervisor_id", "Supervisor ผู้ดูแล", peopleOpts("MANAGER", a.supervisor_id, a.hiring_unit),true)}${field("plate", "ทะเบียนรถ", a.data.plate,true)}${select("fleet_type","ประเภทรถ",opts([{value:"COMPANY",label:"รถบริษัท"},{value:"PARTNER",label:"รถร่วม"}],a.data.fleet_type),true)}${note()}</div><button type="submit" class="primary">บันทึกผู้ดูแล</button><p class="error" data-error></p></form></section>`;
   if (hired && a.position === "DRIVER") {
     body += `<section class="card"><h2>ผลทดลองขับโดย Driver Coach</h2><p class="muted">แยกจากผลสัมภาษณ์ บันทึกโดย Driver Coach ที่ได้รับมอบหมาย</p>${a.data.road_test_result ? `<p><b>${a.data.road_test_result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</b> · ${date(a.data.road_test_date)} · ${esc(person(a.data.road_test_by))}</p><p>${esc(a.data.road_test_note)}</p>` : '<p class="muted">ยังไม่ได้บันทึกผลทดลองขับ</p>'}${is("COACH") && a.coach_id === profile.id ? `<form id="road-test"><div class="fields">${select("result","ผลทดลองขับ",opts([{value:"PASS",label:"ผ่าน"},{value:"FAIL",label:"ไม่ผ่าน"}],a.data.road_test_result),true)}${dates("test_date","วันที่ทดลองขับ",a.data.road_test_date || today(),true)}${note(a.data.road_test_note)}</div><button class="primary" type="submit">บันทึกผลทดลองขับ</button><p class="error" data-error></p></form>` : ""}</section>`;
   }
@@ -589,7 +589,7 @@ async function openApplicant(id: string) {
       (t) =>
         (!t.unit || t.unit === a.hiring_unit) &&
         (!t.position || t.position === a.position) &&
-        Object.hasOwn(categories,t.category) && canTrain(profile.role, profile.units, a, profile.id, t.category),
+        Object.hasOwn(categories,t.category) && canTrain(profile.role, profile.units, a, profile.id, t.category, !!profile.all_units),
     );
     body += `<section class="card"><h2>การอบรม</h2>${
       allowed.length
@@ -602,8 +602,8 @@ async function openApplicant(id: string) {
             ]),
             true,
           )}${note()}</div><button type="submit" class="primary">บันทึกอบรม</button><p class="error" data-error></p></form>`
-        : `<p class="muted">${is("HR","MANAGER") ? "ยังไม่มีหัวข้อประเภทใหม่ที่ตรงกับพนักงานนี้ กรุณาเพิ่มหัวข้ออบรม" : "บันทึกอบรมได้เฉพาะ HR และหัวหน้างานในหน่วยงาน"}</p>`
-    }${is("HR","MANAGER") ? button("+ เพิ่มหัวข้ออบรม", "new-topic") : ""}<div class="table-wrap"><table><thead><tr><th>หัวข้อ</th><th>วันที่</th><th>ผล</th><th></th></tr></thead><tbody>${d.training.map((tr: Row) => `<tr><td>${esc(tr.title)}<br><small>${categories[tr.category] || "ประเภทเดิม"} · ${esc(tr.note)}</small></td><td>${date(tr.training_date)}</td><td>${tr.result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</td><td>${Object.hasOwn(categories,tr.category) && canTrain(profile.role, profile.units, a, profile.id, tr.category) ? `<button data-training="${tr.id}">แก้ไข</button>` : ""}</td></tr>`).join("")}</tbody></table></div></section>`;
+        : `<p class="muted">${is("HR","MANAGER") ? "ยังไม่มีหัวข้อประเภทใหม่ที่ตรงกับพนักงานนี้ กรุณาเพิ่มหัวข้ออบรม" : "บันทึกอบรมได้เฉพาะ HR และ Supervisor ในหน่วยงาน"}</p>`
+    }${is("HR","MANAGER") ? button("+ เพิ่มหัวข้ออบรม", "new-topic") : ""}<div class="table-wrap"><table><thead><tr><th>หัวข้อ</th><th>วันที่</th><th>ผล</th><th></th></tr></thead><tbody>${d.training.map((tr: Row) => `<tr><td>${esc(tr.title)}<br><small>${categories[tr.category] || "ประเภทเดิม"} · ${esc(tr.note)}</small></td><td>${date(tr.training_date)}</td><td>${tr.result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</td><td>${Object.hasOwn(categories,tr.category) && canTrain(profile.role, profile.units, a, profile.id, tr.category, !!profile.all_units) ? `<button data-training="${tr.id}">แก้ไข</button>` : ""}</td></tr>`).join("")}</tbody></table></div></section>`;
   }
   body += `<section class="card"><h2>ประวัติการดำเนินการ</h2>${d.activities.map((e: Row) => `<div class="timeline"><small>${date(e.created_at)} · ${esc(e.display_name || "ผู้สมัคร")}</small><p><b>${esc(actionLabel(e.action))}</b></p><p>${esc(e.note)}</p></div>`).join("")}</section></div><div><section class="card"><h2>ข้อมูลผู้สมัคร</h2><div class="keyvals">${Object.entries(
     values,
@@ -615,7 +615,7 @@ async function openApplicant(id: string) {
     )
     .join(
       "",
-    )}</div></section>${hired ? `<section class="card"><h2>ข้อมูลดูแลพนักงาน</h2><div class="keyvals"><div><small>Coach</small>${esc(person(a.coach_id))}</div><div><small>หัวหน้างาน</small>${esc(person(a.supervisor_id))}</div><div><small>ทะเบียน / รถ</small>${esc(a.data.plate || "—")} / ${fleet(a.data.fleet_type)}</div><div><small>เริ่มงานจริง</small>${date(a.actual_start_date)}</div><div><small>สถานะงาน</small>${a.employment_status === "RESIGNED" ? "ลาออก" : a.employment_status === "ACTIVE" ? "ทำงานอยู่" : "รอเริ่มงาน"}</div><div><small>ลาออก</small>${date(a.resignation_date)}</div></div></section>` : ""}${evals.length ? `<section class="card"><h2>ประวัติสัมภาษณ์</h2>${evals.map((e) => `<div class="slot"><b>รอบ ${e.round + 1} · ${e.stage === "DRAFT" ? "แบบร่าง" : e.result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</b><p>คะแนน ${e.score || "—"}</p><p>ประเภทเชื้อเพลิง ${esc(e.fuel || "—")}</p><p>${esc(e.note)}</p><small>${esc(person(e.evaluator_id))} · ${date(e.updated_at)}</small></div>`).join("")}</section>` : ""}${attachmentsEnabled && is("ADMIN", "HR", "MANAGER") ? `<section class="card"><h2>เอกสารประกอบ</h2><p class="muted">PDF / JPG / PNG ไม่เกิน 5 MB ต่อไฟล์ เก็บในพื้นที่ส่วนตัว</p>${manage || ownManager ? '<form id="upload"><label>เลือกเอกสาร<span class="req">*</span><input type="file" name="file" accept="application/pdf,image/jpeg,image/png" required></label><button type="submit" style="margin-top:12px">อัปโหลดเอกสาร</button><p class="error" data-error></p></form>' : ""}${d.documents.map((doc: Row) => `<p><button data-document="${doc.id}">${esc(doc.title)} ↗</button></p>`).join("")}</section>` : ""}</div></div>`;
+    )}</div></section>${hired ? `<section class="card"><h2>ข้อมูลดูแลพนักงาน</h2><div class="keyvals"><div><small>Coach</small>${esc(person(a.coach_id))}</div><div><small>Supervisor</small>${esc(person(a.supervisor_id))}</div><div><small>ทะเบียน / รถ</small>${esc(a.data.plate || "—")} / ${fleet(a.data.fleet_type)}</div><div><small>เริ่มงานจริง</small>${date(a.actual_start_date)}</div><div><small>สถานะงาน</small>${a.employment_status === "RESIGNED" ? "ลาออก" : a.employment_status === "ACTIVE" ? "ทำงานอยู่" : "รอเริ่มงาน"}</div><div><small>ลาออก</small>${date(a.resignation_date)}</div></div></section>` : ""}${evals.length ? `<section class="card"><h2>ประวัติสัมภาษณ์</h2>${evals.map((e) => `<div class="slot"><b>รอบ ${e.round + 1} · ${e.stage === "DRAFT" ? "แบบร่าง" : e.result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</b><p>คะแนน ${e.score || "—"}</p><p>ประเภทเชื้อเพลิง ${esc(e.fuel || "—")}</p><p>${esc(e.note)}</p><small>${esc(person(e.evaluator_id))} · ${date(e.updated_at)}</small></div>`).join("")}</section>` : ""}${attachmentsEnabled && is("ADMIN", "HR", "MANAGER") ? `<section class="card"><h2>เอกสารประกอบ</h2><p class="muted">PDF / JPG / PNG ไม่เกิน 5 MB ต่อไฟล์ เก็บในพื้นที่ส่วนตัว</p>${manage || ownManager ? '<form id="upload"><label>เลือกเอกสาร<span class="req">*</span><input type="file" name="file" accept="application/pdf,image/jpeg,image/png" required></label><button type="submit" style="margin-top:12px">อัปโหลดเอกสาร</button><p class="error" data-error></p></form>' : ""}${d.documents.map((doc: Row) => `<p><button data-document="${doc.id}">${esc(doc.title)} ↗</button></p>`).join("")}</section>` : ""}</div></div>`;
   shell(body);
   dynamicRequirements();
 }
@@ -713,7 +713,7 @@ async function adminPage() {
       "ตั้งค่าระบบ",
       "สิทธิ์จะตรวจจากฐานข้อมูลทุกครั้ง การเปลี่ยนบทบาทมีผลกับคำสั่งถัดไปทันที",
     ) +
-    `<section class="card"><h2>ผู้ใช้งาน</h2><p class="muted">สร้างบัญชีที่ Supabase → Authentication → Users ก่อน แล้วเพิ่มสิทธิ์ที่นี่ ไม่มีการเก็บรหัสผ่านในตารางระบบ</p>${button("+ เพิ่มสิทธิ์ผู้ใช้", "new-profile", "primary")}<div class="table-wrap"><table><thead><tr><th>ชื่อ / อีเมล</th><th>บทบาท</th><th>หน่วยงาน</th><th>สถานะ</th><th></th></tr></thead><tbody>${profiles.map((p) => `<tr><td>${esc(p.display_name)}<br><small>${esc(p.email)}</small></td><td>${roles[p.role]}</td><td>${esc(p.units.join(", ") || "ทุกหน่วยงานตามบทบาท")}</td><td>${p.active ? "เปิด" : "ปิด"}</td><td><button data-profile="${p.id}">แก้ไข</button><script type="application/json" id="profile-${p.id}">${JSON.stringify(p).replace(/</g, "\\u003c")}</script></td></tr>`).join("")}</tbody></table></div></section><div class="split"><section class="card"><h2>การรับสมัครและลิงก์หลังบ้าน</h2><div class="actions" style="margin-bottom:18px">${links}</div><form id="settings"><div class="fields full">${select(
+    `<section class="card"><h2>ผู้ใช้งาน</h2><p class="muted">สร้างบัญชีที่ Supabase → Authentication → Users ก่อน แล้วเพิ่มสิทธิ์ที่นี่ ไม่มีการเก็บรหัสผ่านในตารางระบบ</p>${button("+ เพิ่มสิทธิ์ผู้ใช้", "new-profile", "primary")}<div class="table-wrap"><table><thead><tr><th>ชื่อ / อีเมล</th><th>บทบาท</th><th>หน่วยงาน</th><th>สถานะ</th><th></th></tr></thead><tbody>${profiles.map((p) => `<tr><td>${esc(p.display_name)}<br><small>${esc(p.email)}</small></td><td>${roles[p.role]}</td><td>${esc(p.role === "MANAGER" && p.all_units ? "ทุกหน่วยงาน (สิทธิ์พิเศษ)" : p.units.join(", ") || (p.role === "MANAGER" ? "ยังไม่กำหนดหน่วยงาน" : "ตามบทบาท"))}</td><td>${p.active ? "เปิด" : "ปิด"}</td><td><button data-profile="${p.id}">แก้ไข</button><script type="application/json" id="profile-${p.id}">${JSON.stringify(p).replace(/</g, "\\u003c")}</script></td></tr>`).join("")}</tbody></table></div></section><div class="split"><section class="card"><h2>การรับสมัครและลิงก์หลังบ้าน</h2><div class="actions" style="margin-bottom:18px">${links}</div><form id="settings"><div class="fields full">${select(
       "public_apply",
       "เปิดสมัครออนไลน์",
       opts(
@@ -728,13 +728,7 @@ async function adminPage() {
   );
 }
 function guide() {
-  return (
-    head(
-      "วิธีใช้งาน",
-      "เริ่มจากงานที่ต้องทำในภาพรวม แล้วเปิดรายการเพียงครั้งเดียว",
-    ) +
-    `<section class="card"><h2>โฟลวหลัก</h2><div class="flow"><span>กรอกใบสมัคร</span>→<span>HR ตรวจ</span>→<span>หัวหน้างานรับสัมภาษณ์</span>→<span>ยืนยันผ่าน = รับงาน</span>→<span>ส่งมอบ / เริ่มงานจริง</span>→<span>ติดตามอบรม</span></div><p>ถ้ายังไม่มีคำขอคน HR ดำเนินการได้ตามปกติ หากมีคำขอสามารถผูกอัตราที่หน่วยงานและตำแหน่งตรงกันได้</p><p>หากยังไม่พร้อมรับ ให้ HR เก็บเป็นผู้สมัครสำรอง เมื่อเรียกกลับเลือกใช้ผลเดิมเป็นแบบร่างหรือสัมภาษณ์ใหม่ได้ โดยหัวหน้างานยืนยันรอบใหม่</p></section><section class="card"><h2>ใครทำอะไร</h2><div class="table-wrap"><table><thead><tr><th>บทบาท</th><th>งานหลัก</th><th>ขอบเขตแก้ไข</th></tr></thead><tbody><tr><td>Admin</td><td>ตั้งค่าและจัดสิทธิ์ / ดูแลข้อมูล</td><td>ทุกหน่วยงาน ยกเว้นยืนยันสัมภาษณ์แทนหัวหน้างาน</td></tr><tr><td>HR</td><td>ตรวจใบสมัคร ติดต่อ ผูกคำขอ สำรอง เรียกกลับ</td><td>ทุกหน่วยงาน</td></tr><tr><td>หัวหน้างาน</td><td>ขอคน รับสัมภาษณ์ ยืนยันรับ ส่งมอบ / อบรม</td><td>เฉพาะหน่วยงานที่รับผิดชอบ</td></tr><tr><td>Driver Coach</td><td>บันทึกอบรมประเภท Coach</td><td>เฉพาะพนักงานที่มอบหมายให้ตนเอง</td></tr><tr><td>Safety / Driver Trainer</td><td>บันทึกอบรมประเภทตนเอง</td><td>ทุกหน่วยงาน</td></tr><tr><td>ผู้จัดการจัดส่ง</td><td>ส่งมอบและบันทึกอบรม</td><td>ทุกหน่วยงาน</td></tr></tbody></table></div><p class="muted">Coach, Safety, Trainer และผู้จัดการจัดส่งเห็นพนักงานที่รับแล้วทุกคน แต่แก้ได้ตามสิทธิ์ข้างต้น</p></section><section class="card"><h2>สิ่งที่ควรทราบ</h2><p>วันที่กรอกและแสดงใช้ dd/mm/yyyy (ค.ศ.) · * สีแดงคือช่องบังคับ · ผลทดลองขับไม่บังคับ · ระบบเชื้อเพลิงกรอกตอนสัมภาษณ์</p><p>เปลี่ยนหน่วยงาน: เก็บหน่วยงานสมัครเดิมไว้ ปลดคำขอเดิมอัตโนมัติ และให้หน่วยงานใหม่รับสัมภาษณ์ใหม่ถ้ายังไม่ยืนยันรับงาน</p><p>KPI 14 วันนับเฉพาะอัตราคนขับ ตั้งแต่ HR รับคำขอถึงยืนยันผ่าน · KPI 90 วันนับผู้เริ่มงานใน 90 วันล่าสุดที่ยังทำงาน เป้าหมาย 90% ไม่รวมผลอบรม</p><p>หากขึ้น “ข้อมูลเปลี่ยนแล้ว” ให้เปิดรายการใหม่ ข้อมูลจากผู้ใช้อื่นจะไม่ถูกเขียนทับ</p></section>`
-  );
+ return head("วิธีใช้งาน","เริ่มจากภาพรวม แล้วเปิดรายการเพื่อทำขั้นตอนถัดไป")+`<section class="card"><h2>โฟลวหลัก</h2><div class="flow"><span>ใบสมัคร</span>→<span>HR ตรวจ</span>→<span>Supervisor สัมภาษณ์</span>→<span>ส่งมอบ</span>→<span>HR กำหนด / เริ่มงาน</span>→<span>อบรม</span></div><p>HR รับผู้สมัครได้โดยไม่ต้องรอคำขอคน หัวข้อคำขอเลือก ทดแทนอัตรากำลังเดิม หรือ ขออัตรากำลังเพิ่ม</p></section><section class="card"><h2>บทบาทและสิทธิ์</h2><div class="table-wrap"><table><thead><tr><th>บทบาท</th><th>งานหลัก</th><th>ขอบเขต</th></tr></thead><tbody><tr><td>Admin</td><td>จัดผู้ใช้ หน่วยงาน และตั้งค่าระบบ</td><td>ทุกหน่วยงาน ยืนยันสัมภาษณ์แทน Supervisor และเริ่มงานแทน HR ไม่ได้</td></tr><tr><td>HR</td><td>คัดกรอง ติดต่อ ส่งมอบ กำหนดและบันทึกเริ่มงาน / ไม่มาเริ่มงาน อบรม</td><td>ทุกหน่วยงาน</td></tr><tr><td>Supervisor</td><td>ขอคน สัมภาษณ์ ส่งมอบ และอบรม</td><td>เฉพาะหน่วยงานที่รับผิดชอบ หรือทุกหน่วยงานเมื่อ Admin เปิดสิทธิ์พิเศษ</td></tr><tr><td>Driver Coach</td><td>บันทึกผลทดลองขับพร้อมวันที่</td><td>ดูพนักงานที่รับแล้ว บันทึกทดลองขับเฉพาะผู้ที่มอบหมายให้ตนเอง</td></tr></tbody></table></div></section><section class="card"><h2>ข้อควรทราบ</h2><p>วันที่ใช้ dd/mm/yyyy (ค.ศ.) เลือกปฏิทินหรือพิมพ์ได้ ช่อง * สีแดงจำเป็นต้องกรอก ประเภทเชื้อเพลิงอ่านจากใบสมัคร</p><p>สัมภาษณ์ผ่าน → ส่งมอบให้ครบ → HR บันทึกกำหนดเริ่มงาน → บันทึกวันจริงหรือไม่มาเริ่มงาน อบรมบันทึกหลังเริ่มงานโดย HR หรือ Supervisor</p><p>KPI 14 วันนับคนขับ ตั้งแต่ HR รับคำขอถึงยืนยันผ่าน ส่วน KPI 90 วันนับผู้เริ่มงานใน 90 วันล่าสุดที่ยังทำงาน ไม่รวมผลอบรม</p></section>`;
 }
 function passwordPage() {
   root.innerHTML = `<main class="login card"><h1>ตั้งรหัสผ่านใหม่</h1><form id="password">${field("password", "รหัสผ่านใหม่ (อย่างน้อย 12 ตัว)", "", true, "password", 'minlength="12" autocomplete="new-password"')}${field("confirm", "ยืนยันรหัสผ่าน", "", true, "password", 'minlength="12" autocomplete="new-password"')}<button type="submit" class="primary">บันทึกรหัสผ่าน</button><p class="error" data-error></p></form></main>`;
@@ -761,12 +755,27 @@ function profileModal(p?: Profile) {
         String(p?.active ?? true),
       ),
       true,
-    )}<label class="full">หน่วยงานที่รับผิดชอบ (บังคับสำหรับหัวหน้างาน)<select name="units" multiple size="4">${units.map((x) => `<option value="${esc(x)}" ${p?.units.includes(x) ? "selected" : ""}>${esc(x)}</option>`).join("")}</select><small>เลือกหลายรายการด้วย Cmd / Ctrl</small></label><input type="hidden" name="version" value="${p?.version || 0}"></div>`,
+    )}${select("all_units","สิทธิ์พิเศษ Supervisor",opts([{value:"false",label:"เฉพาะหน่วยงานที่รับผิดชอบ"},{value:"true",label:"ดูและทำงานได้ทุกหน่วยงาน"}],String(p?.all_units ?? false)),true)}<label class="full">หน่วยงานที่รับผิดชอบ<select name="units" multiple size="4">${units.map((x) => `<option value="${esc(x)}" ${p?.units.includes(x) ? "selected" : ""}>${esc(x)}</option>`).join("")}</select><small>เลือกหลายรายการด้วย Cmd / Ctrl</small></label><input type="hidden" name="version" value="${p?.version || 0}"></div>`,
     "profile",
   );
+  profileRequirements();
+}
+function profileRequirements() {
+  const form=modal.querySelector<HTMLFormElement>("#profile");
+  if(!form)return;
+  const role=form.elements.namedItem("role") as HTMLSelectElement;
+  const all=form.elements.namedItem("all_units") as HTMLSelectElement;
+  const assigned=form.elements.namedItem("units") as HTMLSelectElement;
+  all.disabled=role.value!=="MANAGER";
+  if(all.disabled)all.value="false";
+  const required=role.value==="MANAGER" && all.value!=="true";
+  assigned.required=required;
+  const label=assigned.closest("label")!;
+  label.querySelector(".req")?.remove();
+  if(required){const star=document.createElement("span");star.className="req";star.textContent="*";label.insertBefore(star,assigned);}
 }
 function topicModal() {
-  if (!is("HR","MANAGER")) throw Error("เฉพาะ HR และหัวหน้างาน");
+  if (!is("HR","MANAGER")) throw Error("เฉพาะ HR และ Supervisor");
   const cat = "CUSTOMER";
   openModal(
     "เพิ่มหัวข้ออบรม",
@@ -790,7 +799,7 @@ function topicModal() {
         "",
         "ทุกตำแหน่ง",
       ),
-    )}${select("unit", "หน่วยงาน", unitOpts("", is("MANAGER") ? profile.units : units), is("MANAGER"))}</div>`,
+    )}${select("unit", "หน่วยงาน", unitOpts("", is("MANAGER") && !profile.all_units ? profile.units : units), is("MANAGER"))}</div>`,
     "topic",
   );
 }
@@ -902,7 +911,7 @@ async function clickAction(action: string) {
   if (action === "new-request") {
     openModal(
       "แจ้งขอคน",
-      `<div class="fields">${field("title", "หัวข้อคำขอ", "", true)}${select("unit", "หน่วยงาน", unitOpts("", is("MANAGER") ? profile.units : units), true)}${note()}</div><h3>ทะเบียนและอัตราที่ต้องการ</h3><div id="request-lines"></div>${button("+ เพิ่มทะเบียน / อัตรา", "add-line")}<p class="hint">คนขับและเด็กติดรถแยกคนละรายการ (KPI นับเฉพาะคนขับ)</p>`,
+      `<div class="fields">${select("title", "หัวข้อคำขอ", opts(["ทดแทนอัตรากำลังเดิม","ขออัตรากำลังเพิ่ม"].map(value=>({value,label:value}))),true)}${select("unit", "หน่วยงาน", unitOpts("", is("MANAGER") && !profile.all_units ? profile.units : units), true)}${note()}</div><h3>ทะเบียนและอัตราที่ต้องการ</h3><div id="request-lines"></div>${button("+ เพิ่มทะเบียน / อัตรา", "add-line")}<p class="hint">คนขับและเด็กติดรถแยกคนละรายการ (KPI นับเฉพาะคนขับ)</p>`,
       "request",
     );
     addLine();
@@ -985,7 +994,7 @@ async function clickAction(action: string) {
           "false",
         ),
         true,
-      )}${note("", true)}</div><p class="hint">กลับเข้า HR ตรวจ และให้หัวหน้างานยืนยันผลรอบใหม่</p>`,
+      )}${note("", true)}</div><p class="hint">กลับเข้า HR ตรวจ และให้ Supervisor ยืนยันผลรอบใหม่</p>`,
       "recall",
     );
     return;
@@ -1038,6 +1047,7 @@ function addLine() {
   parent.appendChild(div);
 }
 document.addEventListener("change", (e) => {
+  if ((e.target as Element).closest("#profile")) profileRequirements();
   const el = e.target as HTMLInputElement;
   if (el.name === "position") applyDriverRequirements();
   if (el.closest("#screen")) dynamicRequirements();
@@ -1331,6 +1341,7 @@ document.addEventListener("submit", (e) => {
           await rpc("save_profile", {
             ...d,
             active: d.active === "true",
+            all_units: d.all_units === "true",
             version: Number(d.version),
             units: new FormData(form).getAll("units"),
           });
