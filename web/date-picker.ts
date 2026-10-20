@@ -28,7 +28,9 @@ export function installDatePickers() {
           const width=calendar.offsetWidth || 308;
           calendar.style.position='fixed';
           calendar.style.left=Math.max(8,Math.min(box.left,window.innerWidth-width-8))+'px';
-          calendar.style.top=Math.max(8,Math.min(box.bottom+height>window.innerHeight ? box.top-height-6 : box.bottom+6,window.innerHeight-height-8))+'px';
+          const viewportTop=window.visualViewport?.offsetTop || 0;
+          const viewportBottom=viewportTop+(window.visualViewport?.height || window.innerHeight);
+          calendar.style.top=Math.max(viewportTop+8,Math.min(box.bottom+height>viewportBottom ? box.top-height-6 : box.bottom+6,viewportBottom-height-8))+'px';
           calendar.style.right='auto';
         },
         parseDate:(value)=>parseCalendarDate(value) as Date,
@@ -42,8 +44,11 @@ export function installDatePickers() {
     });
   }
   new MutationObserver(sync).observe(document.body,{childList:true,subtree:true});
-  document.addEventListener('scroll',(event)=>{
-    for(const picker of active.values()) if(!Array.isArray(picker) && picker.isOpen && !picker.calendarContainer.contains(event.target as Node)) picker.close();
-  },true);
+  function reposition() {
+    for(const picker of active.values()) if(!Array.isArray(picker) && picker.isOpen && typeof picker.config.position==='function') picker.config.position(picker,undefined);
+  }
+  document.addEventListener('scroll',reposition,true);
+  window.visualViewport?.addEventListener('resize',reposition);
+  window.visualViewport?.addEventListener('scroll',reposition);
   sync();
 }
