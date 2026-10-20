@@ -43,7 +43,7 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
       "utf8",
     ),
   );
-  for (const file of ["20261020105230_application_pin.sql","20261020111221_required_application_fields.sql","20261020113344_hiring_workflow_v43.sql","20261020120123_four_roles_and_request_types.sql"]) await db.exec(await readFile(new URL("../supabase/migrations/"+file,import.meta.url),"utf8"));
+  for (const file of ["20261020105230_application_pin.sql","20261020111221_required_application_fields.sql","20261020113344_hiring_workflow_v43.sql","20261020120123_four_roles_and_request_types.sql","20261020130620_applicant_list_workspace_v47.sql"]) await db.exec(await readFile(new URL("../supabase/migrations/"+file,import.meta.url),"utf8"));
   for (const [key, id] of Object.entries(ids)) {
     await db.query("insert into auth.users values($1,$2)", [
       id,
@@ -370,6 +370,24 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
     assert.equal((await get(id)).status,"NO_SHOW");
     assert.equal((await cmd("hr","requests"))[0].slots.find((x:any)=>x.id===slotId).status,"OPEN");
     await assert.rejects(()=>mutate("hr","employment",id,{actual_start_date:day}));
+  });
+  await t.test("rich list columns, filters, sorting and pagination preserve private data boundaries",async()=>{
+    const inserted=await db.query<{id:string}>(`insert into rm_private.applicants(full_name,phone,position,original_unit,hiring_unit,status,coach_id,data)values
+    ('List47 Alpha','0800004701','DRIVER',$1,$1,'HIRED',$2,jsonb_build_object('birth_date',((now() at time zone 'Asia/Bangkok')::date-interval '30 years')::date::text,'vehicle_type','10W','national_id','private-id','driver_license_no','private-license')),
+    ('List47 Beta','0800004702','DRIVER',$1,$1,'HIRED',$2,jsonb_build_object('birth_date',((now() at time zone 'Asia/Bangkok')::date-interval '20 years')::date::text,'vehicle_type','4W')) returning id`,[unit,ids.coach]);
+    const list=await cmd('hr','applicants',{search:'List47',sort:'age',order:'asc',size:10});
+    assert.equal(list.total,2);assert.equal(list.rows[0].age_years,20);assert.equal(list.rows[0].age_eligible,false);assert.equal(list.rows[1].age_years,30);assert.equal(list.rows[1].age_eligible,true);
+    assert.ok(list.rows[0].applicant_code.startsWith('DRV-'));assert.equal(list.rows[1].vehicle_type,'10W');
+    assert.ok(!JSON.stringify(list).includes('birth_date'));assert.ok(!JSON.stringify(list).includes('national_id'));assert.ok(!JSON.stringify(list).includes('private-id'));
+    assert.equal((await cmd('hr','applicants',{search:'List47',age_min:25,vehicle:'10W',position:'DRIVER'})).total,1);
+    assert.equal((await cmd('hr','applicants',{search:list.rows[0].applicant_code})).total,1);
+    assert.equal((await cmd('hr','applicants',{search:'List47',offset:1,sort:'full_name',order:'asc'})).rows[0].full_name,'List47 Beta');
+    assert.equal((await cmd('other','applicants',{search:'List47'})).total,0);
+    const coach=await cmd('coach','applicants',{search:'List47'});assert.equal(coach.rows[0].age_years,null);assert.equal(coach.rows[0].age_eligible,null);
+    await assert.rejects(()=>cmd('coach','applicants',{age_min:25}));await assert.rejects(()=>cmd('coach','applicants',{sort:'age'}));
+    await assert.rejects(()=>cmd('hr','applicants',{age_min:40,age_max:20}));await assert.rejects(()=>cmd('hr','applicants',{size:100000}));await assert.rejects(()=>cmd('hr','applicants',{sort:'id; delete from rm_private.profiles'}));
+    await assert.rejects(()=>as('hr',"select rm_private.applicant_age('2000-01-01',current_date)"));
+    await db.query('delete from rm_private.applicants where id=any($1::uuid[])',[inserted.rows.map(r=>r.id)]);
   });
   await t.test(
     "live profile deactivation, self-demotion guard and public submission gating",

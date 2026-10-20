@@ -108,6 +108,10 @@ export interface Profile {
   version: number;
 }
 export interface Applicant {
+  applicant_code?: string;
+  age_years?: number|null;
+  age_eligible?: boolean|null;
+  vehicle_type?: string;
   id: string;
   full_name: string;
   position: string;
@@ -153,4 +157,12 @@ export function parseCalendarDate(value: string): Date | undefined {
     valueDate.setHours(0,0,0,0);
     return valueDate;
   } catch {return undefined;}
+}
+
+export function ageOnDate(birth:string|undefined,asOf:string):number|null {
+ if(!birth||!/^\d{4}-\d{2}-\d{2}$/.test(birth))return null;
+ const dt=new Date(birth+'T00:00:00Z');
+ if(Number.isNaN(dt.getTime())||dt.toISOString().slice(0,10)!==birth||birth>asOf)return null;
+ const years=Number(asOf.slice(0,4))-Number(birth.slice(0,4))-(asOf.slice(5)<birth.slice(5)?1:0);
+ return years>=0&&years<=120?years:null;
 }

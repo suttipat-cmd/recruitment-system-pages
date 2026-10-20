@@ -11,6 +11,7 @@ import {
   isoDate,
   today,
   retention,
+  ageOnDate,
   canTrain,
   requiresAgeApproval,
   type Applicant,
@@ -28,7 +29,8 @@ let people: Row[] = [];
 let topics: Row[] = [];
 let settings: Row = {};
 let screen = "dashboard";
-let filters = { search: "", status: "", unit: "", offset: 0 };
+const blankFilters = () => ({search:"",status:"",unit:"",offset:0,size:20,sort:"created_at",order:"desc",position:"",vehicle:"",age_min:"",age_max:"",from:"",to:""});
+let filters = blankFilters();
 let detail: Row | null = null;
 let selectedDetailTab: DetailTab = "general";
 let tabApplicantId = "";
@@ -187,7 +189,7 @@ async function init() {
         profile = undefined as unknown as Profile;
         detail = null;
         screen = "dashboard";
-        filters = { search: "", status: "", unit: "", offset: 0 };
+        filters = blankFilters();
         login();
       }
     });
@@ -270,11 +272,11 @@ function shell(body: string) {
     ...(is("ADMIN") ? [["admin", "ตั้งค่าระบบ"]] : []),
   ];
   const navButton = (key:string,label:string) => `<button type="button" data-nav="${key}" title="${label}" aria-label="${label}" ${screen === key ? 'aria-current="page"' : ''} class="${screen === key ? "active" : ""}"><span class="nav-icon" aria-hidden="true">${navIcons[key]}</span><span class="nav-label">${label}</span></button>`;
-  root.innerHTML = `<div class="shell" data-role="${profile.role}"><aside class="sidebar" aria-label="เมนูหลัก"><div class="brand"><span class="brand-mark">R</span><span class="nav-label">Recruitment<small>WORKSPACE · V4.6</small></span></div><button class="mobile-menu" type="button" data-action="toggle-menu" aria-expanded="false" aria-label="เปิดหรือปิดเมนู">☰ เมนู</button><nav>${nav.map(([key,label]) => navButton(key!,label!)).join("")}</nav><div class="bottom"><button type="button" data-action="apply" title="แบบฟอร์มสมัครงาน" aria-label="แบบฟอร์มสมัครงาน"><span class="nav-icon" aria-hidden="true">↗</span><span class="nav-label">แบบฟอร์มสมัครงาน</span></button><div class="profile"><span class="avatar" aria-hidden="true">${esc(profile.display_name.slice(0,1))}</span><span class="nav-label">${esc(profile.display_name)}<small>${roles[profile.role]}</small></span></div><button type="button" data-action="password" title="รหัสผ่าน" aria-label="รหัสผ่าน"><span class="nav-icon" aria-hidden="true">⚿</span><span class="nav-label">รหัสผ่าน</span></button><button type="button" data-action="logout" title="ออกจากระบบ" aria-label="ออกจากระบบ"><span class="nav-icon" aria-hidden="true">⇥</span><span class="nav-label">ออกจากระบบ</span></button></div></aside><main class="content"><div class="workspace-context"><span>${roles[profile.role]} Workspace</span><span>${esc(is("MANAGER") ? profile.all_units ? "ทุกหน่วยงาน · สิทธิ์พิเศษ" : profile.units.join(" · ") : "Recruitment System")}</span></div>${body}</main></div>`;
+  root.innerHTML = `<div class="shell" data-role="${profile.role}"><aside class="sidebar" aria-label="เมนูหลัก"><div class="brand"><span class="brand-mark">${navIcons.applicants}</span><span class="nav-label">Recruitment<small>MANAGEMENT · V4.7</small></span></div><button class="mobile-menu" type="button" data-action="toggle-menu" aria-expanded="false" aria-label="เปิดหรือปิดเมนู">☰ เมนู</button><nav>${nav.map(([key,label]) => navButton(key!,label!)).join("")}</nav><div class="bottom"><button type="button" data-action="apply" title="แบบฟอร์มสมัครงาน" aria-label="แบบฟอร์มสมัครงาน"><span class="nav-icon" aria-hidden="true">↗</span><span class="nav-label">แบบฟอร์มสมัครงาน</span></button><div class="profile"><span class="avatar" aria-hidden="true">${esc(profile.display_name.slice(0,1))}</span><span class="nav-label">${esc(profile.display_name)}<small>${roles[profile.role]}</small></span></div><button type="button" data-action="password" title="รหัสผ่าน" aria-label="รหัสผ่าน"><span class="nav-icon" aria-hidden="true">⚿</span><span class="nav-label">รหัสผ่าน</span></button><button type="button" data-action="logout" title="ออกจากระบบ" aria-label="ออกจากระบบ"><span class="nav-icon" aria-hidden="true">⇥</span><span class="nav-label">ออกจากระบบ</span></button></div></aside><main class="content"><div class="workspace-context"><span>${roles[profile.role]} Workspace</span><span>${esc(is("MANAGER") ? profile.all_units ? "ทุกหน่วยงาน · สิทธิ์พิเศษ" : profile.units.join(" · ") : "Recruitment System")}</span></div>${body}</main></div>`;
   compactForms();
 }
-function head(title: string, sub: string, actions = "") {
-  return `<header class="topbar"><div><p class="section-label">Recruitment System</p><h1>${title}</h1><p class="muted" style="margin:8px 0 0">${sub}</p></div><div class="actions">${actions}${button("รีเฟรช", "refresh")}</div></header>`;
+function head(title: string, sub: string, actions = "",kicker="Recruitment System") {
+  return `<header class="topbar"><div><p class="section-label">${esc(kicker)}</p><h1>${title}</h1><p class="muted" style="margin:8px 0 0">${sub}</p></div><div class="actions">${actions.includes('data-action="apply"')?"":button("แบบฟอร์ม", "apply")}${actions}${button("รีเฟรช", "refresh")}</div></header>`;
 }
 async function render() {
   const token = ++generation;
@@ -319,37 +321,44 @@ async function dashboard() {
   `${is("HR","MANAGER") ? `<div class="split"><section class="card"><div class="section-heading"><h2>จัดหาคนขับภายใน 14 วัน</h2>${button("ดูคำขอคน","requests")}</div><div class="grid">${[["อัตราคนขับ",k.total],["รับผ่านแล้ว",k.filled],["ทัน 14 วัน",k.on_time],["ยังไม่ครบ / เกินกำหนด",k.overdue]].map(([label,n])=>`<div class="stat"><small>${label}</small><strong>${n}</strong></div>`).join('')}</div><p class="hint">เริ่มเมื่อ HR รับเรื่อง จบเมื่อ Supervisor ยืนยันผ่าน</p></section><section class="card"><h2>ผู้เริ่มงานใน 90 วันล่าสุด</h2><strong class="metric-value">${r.rate === null ? "—" : r.rate+"%"}</strong><div class="progress"><i style="width:${Math.min(100,r.rate||0)}%"></i></div><p>ยังทำงาน ${r.active} / เริ่มงาน ${r.total} คน · เป้าหมาย 90%</p><small>นับวันเริ่มงานจริง ${date(retention([],today()).from)} – ${date(today())}</small></section></div>${button("ดูผู้สมัครสำรอง","reserves")}` : ''}` +
   `${is("COACH") ? `<section class="card"><h2>ขั้นตอนบันทึกผลทดลองขับ</h2><div class="flow"><span>1. เลือกพนักงาน</span>→<span>2. เปิดผลทดลองขับ</span>→<span>3. ระบุผลและวันที่</span></div><p class="muted">บันทึกได้เฉพาะพนักงานที่ได้รับมอบหมายให้คุณดูแล</p>${button("ดูรายชื่อพนักงาน","coach-workspace")}</section>` : ''}</div></details>`;
 }
+function applicantCode(a:Applicant) {
+ if(a.applicant_code)return a.applicant_code;
+ const stamp=new Date(a.created_at);
+ const day=Number.isNaN(stamp.getTime())?"":new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Bangkok",year:"numeric",month:"2-digit",day:"2-digit"}).format(stamp).replaceAll("-","");
+ return `${a.position==='DRIVER'?'DRV':'AST'}-${day}-${a.id.replaceAll('-','').slice(0,8).toUpperCase()}`;
+}
+function ageBadge(years:number|null|undefined, pos:string) {
+ if(years===null||years===undefined)return '<span class="badge neutral">ยังไม่มีข้อมูลอายุ</span>';
+ const eligible=years>=(pos==='DRIVER'?25:18);
+ return `<span class="badge ${eligible?'':'bad'}"><span class="status-dot" aria-hidden="true"></span>${years} ปี · ${eligible?'ผ่านเกณฑ์':'ต่ำกว่าเกณฑ์'}</span>`;
+}
 async function applicantList() {
-  const training = screen === "training";
-  const f = { ...filters, ...(training ? { status: "STARTED" } : {}) };
-  const list = await rpc("applicants", f);
-  return (
-    head(
-      training ? "การอบรมพนักงาน" : is("COACH") ? "พนักงานและงานทดลองขับ" : is("MANAGER") ? "ผู้สมัครและพนักงานในความรับผิดชอบ" : "รายการผู้สมัคร",
-      training
-        ? "เปิดพนักงานเพื่อดูหรือบันทึกผลอบรมตามสิทธิ์"
-        : "ค้นหา → เปิดรายการ → ทำขั้นตอนถัดไป",
-      is("ADMIN", "HR") && !training
-        ? button("+ เพิ่มผู้สมัคร", "new-applicant", "primary")
-        : "",
-    ) +
-    `<section class="card"><form id="filters" class="toolbar">${field("search", "ชื่อหรือโทรศัพท์", filters.search)}${select("unit", "หน่วยงาน", unitOpts(filters.unit).replace("เลือก…", "ทุกหน่วยงาน"))}${
-      !training
-        ? select(
-            "status",
-            "สถานะ",
-            opts(
-              Object.entries(statuses).map(([value, label]) => ({
-                value,
-                label,
-              })),
-              filters.status,
-              "ทุกสถานะ",
-            ),
-          )
-        : ""
-    }<button type="submit">ค้นหา</button></form><div class="applicant-mobile">${list.rows.map((a:Applicant)=>`<article class="mobile-record"><div class="section-heading"><b>${esc(a.full_name)}</b>${badge(a.status)}</div><p>${position(a.position)} · ${esc(a.hiring_unit)}</p><div class="record-meta"><span>สมัคร ${date(a.created_at)}</span>${is("COACH")&&a.coach_id===profile.id?'<span class="badge">งานของฉัน</span>':`<span>${esc(person(is("COACH")?a.coach_id:a.owner_id))}</span>`}</div><button data-open="${a.id}" ${training?'data-open-tab="training"':''}>เปิดรายการ →</button></article>`).join('')}${!list.rows.length?'<div class="empty">ยังไม่มีรายการในเงื่อนไขนี้</div>':''}</div><div class="table-wrap applicant-desktop"><table><thead><tr><th>ชื่อผู้สมัคร</th><th>ตำแหน่ง / หน่วยงาน</th><th>สถานะ</th><th>วันที่สมัคร</th><th>${is("COACH") ? "Driver Coach / งานที่รับผิดชอบ" : "ผู้สัมภาษณ์"}</th><th></th></tr></thead><tbody>${list.rows.map((a: Applicant) => `<tr><td><b>${esc(a.full_name)}</b><br><small>${esc(a.phone)}</small></td><td>${position(a.position)}<br><small>${esc(a.hiring_unit)}</small></td><td>${badge(a.status)}</td><td>${date(a.created_at)}</td><td>${is("COACH") ? `${esc(person(a.coach_id))}${a.coach_id === profile.id ? '<br><span class="badge">งานของฉัน</span>' : '<br><small>ดูข้อมูล</small>'}` : esc(person(a.owner_id))}</td><td><button data-open="${a.id}" ${training?'data-open-tab="training"':''}>เปิดรายการ →</button></td></tr>`).join("")}</tbody></table>${!list.rows.length ? '<div class="empty">ยังไม่มีรายการในเงื่อนไขนี้</div>' : ""}</div><div class="pagination"><small>ทั้งหมด ${list.total} รายการ · หน้า ${Math.floor(filters.offset / 30) + 1}</small><div class="actions"><button data-page="-1" ${filters.offset === 0 ? "disabled" : ""}>ก่อนหน้า</button><button data-page="1" ${filters.offset + 30 >= list.total ? "disabled" : ""}>ถัดไป</button></div></div></section>`
-  );
+ const training=screen==='training';
+ const list=await rpc("applicants",{...filters,...(training?{status:"STARTED"}:{})});
+ const rows=list.rows as Applicant[];
+ const sorted=(key:string,label:string)=>`<button class="column-sort" type="button" data-sort="${key}">${label} <span aria-hidden="true">${filters.sort===key?(filters.order==='asc'?'↑':'↓'):'↕'}</span></button>`;
+ const sortAria=(key:string)=>filters.sort===key?`aria-sort="${filters.order==='asc'?'ascending':'descending'}"`:'';
+ const active=!!(filters.search||filters.unit||filters.status||filters.position||filters.vehicle||filters.age_min||filters.age_max||filters.from||filters.to);
+ const total=Number(list.total),start=total?filters.offset+1:0,end=Math.min(filters.offset+rows.length,total),last=Math.max(0,Math.floor((total-1)/filters.size)*filters.size);
+ return `<nav class="breadcrumb" aria-label="ตำแหน่งปัจจุบัน"><span>⌂</span><span>›</span><strong>${training?'พนักงาน / การอบรม':is('COACH')?'พนักงาน':'ผู้สมัครทั้งหมด'}</strong></nav>`+head(training?'พนักงาน / การอบรม':is('COACH')?'พนักงานและงานทดลองขับ':'ผู้สมัครทั้งหมด',training?'ค้นหาพนักงาน เปิดข้อมูล และบันทึกผลอบรมตามสิทธิ์':'ค้นหา คัดกรอง และติดตามกระบวนการรับสมัคร',button("แบบฟอร์ม", "apply")+(is('ADMIN','HR')&&!training?button('+ เพิ่มผู้สมัคร','new-applicant','primary'):''),training?'Employees':'Applicants')+
+ `<details class="card filter-panel" ${active?'open':''}><summary><span>☷ &nbsp;ค้นหาและตัวกรอง</span><span class="filter-status">${active?'มีตัวกรอง':''}⌄</span></summary><form id="filters"><div class="list-filter-grid">${field('search','ชื่อ เบอร์โทร หรือรหัสผู้สมัคร',filters.search)}${select('unit','หน่วยงาน',unitOpts(filters.unit).replace('เลือก…','ทุกหน่วยงาน'))}${!training?select('status','สถานะ',opts(Object.entries(statuses).filter(([v])=>!is('COACH')||['HIRED','STARTED'].includes(v)).map(([value,label])=>({value,label})),filters.status,'ทุกสถานะ')):''}${select('position','ตำแหน่ง',opts([{value:'DRIVER',label:'พนักงานขับรถ'},{value:'HELPER',label:'เด็กติดรถ'}],filters.position,'ทุกตำแหน่ง'))}${select('vehicle','ประเภทรถ',opts(['เทรเลอร์','4W','6W','10W'].map(x=>({value:x,label:x})),filters.vehicle,'ทุกประเภท'))}${!is('COACH')?field('age_min','อายุตั้งแต่ (ปี)',filters.age_min,false,'number','min="0" max="120"')+field('age_max','อายุไม่เกิน (ปี)',filters.age_max,false,'number','min="0" max="120"'):''}${dates('from','สมัครตั้งแต่วันที่',filters.from)}${dates('to','ถึงวันที่',filters.to)}</div><div class="filter-actions"><button class="primary" type="submit">ค้นหา</button>${button('ล้างตัวกรอง','clear-filters')}</div><p class="error" data-error></p></form></details>
+ <section class="surface applicant-list-surface"><div class="list-table-heading"><h2>${training?'รายชื่อพนักงาน':'รายการผู้สมัคร'}</h2><small>ทั้งหมด ${total} รายการ</small></div>
+ <div class="applicant-mobile">${rows.map(a=>`<article class="mobile-record"><small class="reference-code">${esc(applicantCode(a))}</small><div class="section-heading"><b>${esc(a.full_name)}</b>${badge(a.status)}</div><p>${position(a.position)} · ${esc(a.hiring_unit)}</p><div class="mobile-record-facts">${!is('COACH')?ageBadge(a.age_years,a.position):''}<span>${esc(a.vehicle_type||'—')}</span></div><div class="record-meta"><span>สมัคร ${date(a.created_at)}</span><span>${is('COACH')&&a.coach_id===profile.id?'งานของฉัน':esc(person(is('COACH')?a.coach_id:a.owner_id))}</span></div><button data-open="${a.id}" ${training?'data-open-tab="training"':''}>รายละเอียด →</button></article>`).join('')}${!rows.length?'<div class="empty">ยังไม่มีรายการในเงื่อนไขนี้</div>':''}</div>
+ <div class="table-wrap applicant-desktop"><table class="applicant-table"><thead><tr><th>รหัส</th><th ${sortAria('full_name')}>${sorted('full_name','ชื่อผู้สมัคร')}</th><th ${sortAria('created_at')}>${sorted('created_at','วันที่สมัคร')}</th><th>ตำแหน่ง</th>${!is('COACH')?`<th ${sortAria('age')}>${sorted('age','อายุ')}</th>`:''}<th>ประเภทรถ</th><th ${sortAria('hiring_unit')}>${sorted('hiring_unit','หน่วยงาน')}</th><th>สถานะ</th>${is('COACH')?'<th>Driver Coach</th>':''}<th></th></tr></thead><tbody>${rows.map(a=>`<tr><td class="reference-code" title="${a.id}">${esc(applicantCode(a))}</td><td><b>${esc(a.full_name)}</b><small class="cell-secondary">${esc(a.phone)}</small></td><td>${date(a.created_at)}</td><td>${position(a.position)}</td>${!is('COACH')?`<td>${ageBadge(a.age_years,a.position)}</td>`:''}<td>${esc(a.vehicle_type||'—')}</td><td>${esc(a.hiring_unit)}</td><td>${badge(a.status)}</td>${is('COACH')?`<td>${a.coach_id===profile.id?'<span class="badge">งานของฉัน</span>':esc(person(a.coach_id))}</td>`:''}<td><button data-open="${a.id}" ${training?'data-open-tab="training"':''}>รายละเอียด ›</button></td></tr>`).join('')}</tbody></table>${!rows.length?'<div class="empty">ยังไม่มีรายการในเงื่อนไขนี้</div>':''}</div>
+ <div class="list-pagination"><small>ผลลัพธ์: ${start}–${end} จาก ${total}</small><div class="page-controls"><label>แสดงรายการ<select data-list-size aria-label="จำนวนรายการต่อหน้า">${[10,20,30,50,100].map(n=>`<option value="${n}" ${filters.size===n?'selected':''}>${n}</option>`).join('')}</select></label><button data-offset="0" aria-label="หน้าแรก" ${filters.offset===0?'disabled':''}>«</button><button data-page="-1" aria-label="หน้าก่อนหน้า" ${filters.offset===0?'disabled':''}>‹</button><span class="page-indicator">${Math.floor(filters.offset/filters.size)+1} / ${Math.max(1,Math.ceil(total/filters.size))}</span><button data-page="1" aria-label="หน้าถัดไป" ${filters.offset+filters.size>=total?'disabled':''}>›</button><button data-offset="${last}" aria-label="หน้าสุดท้าย" ${filters.offset>=last?'disabled':''}>»</button></div></div></section>`;
+}
+function personalSummary(a:Applicant) {
+ const d=a.data;
+ const row=(label:string,value:unknown)=>`<div class="summary-row"><span>${label}</span><div>${esc(value||'—')}</div></div>`;
+ const datum=(key:string,label:string,isDate=false)=>row(label,isDate?date(d[key]):d[key]);
+ const group=(title:string,content:string)=>`<section class="profile-group"><h3>${title}</h3>${content}</section>`;
+ const identity=group('ข้อมูลส่วนบุคคล',datum('prefix','คำนำหน้า')+row('ชื่อ–สกุล',a.full_name)+datum('gender','เพศ')+datum('birth_date','วันเดือนปีเกิด',true)+(!is('COACH')?`<div class="summary-row"><span>อายุ</span><div>${ageBadge(ageOnDate(d.birth_date,today()),a.position)}</div></div>`:'')+row('ตำแหน่ง',position(a.position)));
+ const contact=group('ข้อมูลติดต่อและการขับรถ',row('เบอร์โทรศัพท์',a.phone)+datum('line_id','LINE ID')+datum('vehicle_type','ประเภทรถ')+datum('cargo_types','สินค้าที่เคยขน')+datum('license_type','ประเภทใบขับขี่')+datum('fuel_type','ประเภทเชื้อเพลิง'));
+ const government=!is('COACH')?group('ข้อมูลบัตรประชาชน',datum('national_id','เลขบัตรประชาชน')+datum('id_issued_at','วันออกบัตร',true)+datum('id_expires_at','วันหมดอายุบัตร',true)):'';
+ const licence=group('ข้อมูลใบขับขี่',(!is('COACH')?datum('driver_license_no','เลขใบขับขี่'):'')+datum('license_type','ประเภทใบขับขี่')+datum('license_issued_at','วันออกใบขับขี่',true)+datum('license_expires_at','ใบขับขี่หมดอายุ',true));
+ const unit=group('หน่วยงาน',row('หน่วยงานที่สมัครเดิม',a.original_unit)+row('หน่วยงานที่รับจริง',a.hiring_unit)+row('ผู้สัมภาษณ์',person(a.owner_id))+row('คำขอที่ผูก',a.slot_id?'ผูกคำขอแล้ว':'ไม่ผูกคำขอ'));
+ const experience=group('ความพร้อมและประสบการณ์',datum('current_job_status','สถานะการทำงาน')+datum('available_start_date','วันที่พร้อมเริ่มงาน',true)+datum('availability_note','หมายเหตุความพร้อม')+datum('construction_brands','วัสดุก่อสร้าง / ยี่ห้อ')+datum('beverage_brands','เครื่องดื่ม / ยี่ห้อ')+datum('other_cargo_note','งานขนส่งอื่น'));
+ return `<section class="card personal-summary" data-detail-group="general"><div class="profile-groups">${identity}${contact}${government}${licence}${unit}${experience}</div></section>`;
 }
 function profileFields(a?: Applicant) {
   const newApplication = !a;
@@ -539,9 +548,10 @@ async function openApplicant(id: string, requestedTab?: DetailTab) {
   };
   let body =
     head(
-      a.full_name,
-      `${position(a.position)} · ${a.hiring_unit}`,
+      is("COACH") ? "รายละเอียดพนักงาน" : "รายละเอียดผู้สมัคร",
+      "ข้อมูลใบสมัครและการดำเนินการครบทุกขั้นตอน",
       button(screen === "dashboard" ? "← กลับงานที่ต้องทำ" : "← กลับรายการ", "back"),
+      "Applicant Detail",
     ) +
     `<section class="card"><div class="detail-head"><div>${badge(a.status)}<p class="muted" style="margin-top:10px">สมัคร ${date(a.created_at)} · รอบสัมภาษณ์ ${a.round + 1}</p></div><div class="actions">${actions}</div></div><div class="keyvals"><div><small>หน่วยงานที่สมัครเดิม</small>${esc(a.original_unit)}</div><div><small>เบอร์โทร</small>${esc(a.phone)}</div><div><small>ผู้สัมภาษณ์</small>${esc(person(a.owner_id))}</div><div><small>คำขอที่ผูก</small>${a.slot_id ? "ผูกคำขอแล้ว" : "ยังไม่ผูก — ดำเนินการรับสมัครได้ตามปกติ"}</div></div>${manage ? `<div class="actions" style="margin-top:18px">${button("ผูก / ปลดคำขอคน", "match")}</div>` : ""}</section>`;
   if (d.duplicates.length && manage && ["HR_REVIEW","WAITING_INFO","INTERVIEW"].includes(a.status))
@@ -623,17 +633,7 @@ async function openApplicant(id: string, requestedTab?: DetailTab) {
         : `<p class="muted">${is("HR","MANAGER") ? "ยังไม่มีหัวข้อประเภทใหม่ที่ตรงกับพนักงานนี้ กรุณาเพิ่มหัวข้ออบรม" : "บันทึกอบรมได้เฉพาะ HR และ Supervisor ในหน่วยงาน"}</p>`
     }${is("HR","MANAGER") ? button("+ เพิ่มหัวข้ออบรม", "new-topic") : ""}<div class="table-wrap"><table><thead><tr><th>หัวข้อ</th><th>วันที่</th><th>ผล</th><th></th></tr></thead><tbody>${d.training.map((tr: Row) => `<tr><td>${esc(tr.title)}<br><small>${categories[tr.category] || "ประเภทเดิม"} · ${esc(tr.note)}</small></td><td>${date(tr.training_date)}</td><td>${tr.result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</td><td>${Object.hasOwn(categories,tr.category) && canTrain(profile.role, profile.units, a, profile.id, tr.category, !!profile.all_units) ? `<button data-training="${tr.id}">แก้ไข</button>` : ""}</td></tr>`).join("")}</tbody></table></div></section>`;
   }
-  body += `<section class="card" data-detail-group="history"><h2>ประวัติการดำเนินการ</h2>${d.activities.map((e: Row) => `<div class="timeline"><small>${date(e.created_at)} · ${esc(e.display_name || "ผู้สมัคร")}</small><p><b>${esc(actionLabel(e.action))}</b></p><p>${esc(e.note)}</p></div>`).join("")}</section></div><div><section class="card" data-detail-group="general"><h2>ข้อมูลผู้สมัคร</h2><div class="keyvals">${Object.entries(
-    values,
-  )
-    .filter(([key]) => a.data[key])
-    .map(
-      ([key, label]) =>
-        `<div><small>${label}</small>${key.includes("date") || key.endsWith("_at") ? date(a.data[key]) : esc(a.data[key])}</div>`,
-    )
-    .join(
-      "",
-    )}</div></section>${hired ? `<section class="card" data-detail-group="employment"><h2>ข้อมูลดูแลพนักงาน</h2><div class="keyvals"><div><small>Coach</small>${esc(person(a.coach_id))}</div><div><small>Supervisor</small>${esc(person(a.supervisor_id))}</div><div><small>ทะเบียน / รถ</small>${esc(a.data.plate || "—")} / ${fleet(a.data.fleet_type)}</div><div><small>เริ่มงานจริง</small>${date(a.actual_start_date)}</div><div><small>สถานะงาน</small>${a.employment_status === "RESIGNED" ? "ลาออก" : a.employment_status === "ACTIVE" ? "ทำงานอยู่" : "รอเริ่มงาน"}</div><div><small>ลาออก</small>${date(a.resignation_date)}</div></div></section>` : ""}${evals.length ? `<section class="card" data-detail-group="history"><h2>ประวัติสัมภาษณ์</h2>${evals.map((e) => `<div class="slot"><b>รอบ ${e.round + 1} · ${e.stage === "DRAFT" ? "แบบร่าง" : e.result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</b><p>คะแนน ${e.score || "—"}</p><p>ประเภทเชื้อเพลิง ${esc(e.fuel || "—")}</p><p>${esc(e.note)}</p><small>${esc(person(e.evaluator_id))} · ${date(e.updated_at)}</small></div>`).join("")}</section>` : ""}${attachmentsEnabled && is("ADMIN", "HR", "MANAGER") ? `<section class="card" data-detail-group="general"><h2>เอกสารประกอบ</h2><p class="muted">PDF / JPG / PNG ไม่เกิน 5 MB ต่อไฟล์ เก็บในพื้นที่ส่วนตัว</p>${manage || ownManager ? '<form id="upload"><label>เลือกเอกสาร<span class="req">*</span><input type="file" name="file" accept="application/pdf,image/jpeg,image/png" required></label><button type="submit" style="margin-top:12px">อัปโหลดเอกสาร</button><p class="error" data-error></p></form>' : ""}${d.documents.map((doc: Row) => `<p><button data-document="${doc.id}">${esc(doc.title)} ↗</button></p>`).join("")}</section>` : ""}</div></div>`;
+  body += `<section class="card" data-detail-group="history"><h2>ประวัติการดำเนินการ</h2>${d.activities.map((e: Row) => `<div class="timeline"><small>${date(e.created_at)} · ${esc(e.display_name || "ผู้สมัคร")}</small><p><b>${esc(actionLabel(e.action))}</b></p><p>${esc(e.note)}</p></div>`).join("")}</section></div><div>${personalSummary(a)}${hired ? `<section class="card" data-detail-group="employment"><h2>ข้อมูลดูแลพนักงาน</h2><div class="keyvals"><div><small>Coach</small>${esc(person(a.coach_id))}</div><div><small>Supervisor</small>${esc(person(a.supervisor_id))}</div><div><small>ทะเบียน / รถ</small>${esc(a.data.plate || "—")} / ${fleet(a.data.fleet_type)}</div><div><small>เริ่มงานจริง</small>${date(a.actual_start_date)}</div><div><small>สถานะงาน</small>${a.employment_status === "RESIGNED" ? "ลาออก" : a.employment_status === "ACTIVE" ? "ทำงานอยู่" : "รอเริ่มงาน"}</div><div><small>ลาออก</small>${date(a.resignation_date)}</div></div></section>` : ""}${evals.length ? `<section class="card" data-detail-group="history"><h2>ประวัติสัมภาษณ์</h2>${evals.map((e) => `<div class="slot"><b>รอบ ${e.round + 1} · ${e.stage === "DRAFT" ? "แบบร่าง" : e.result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</b><p>คะแนน ${e.score || "—"}</p><p>ประเภทเชื้อเพลิง ${esc(e.fuel || "—")}</p><p>${esc(e.note)}</p><small>${esc(person(e.evaluator_id))} · ${date(e.updated_at)}</small></div>`).join("")}</section>` : ""}${attachmentsEnabled && is("ADMIN", "HR", "MANAGER") ? `<section class="card" data-detail-group="general"><h2>เอกสารประกอบ</h2><p class="muted">PDF / JPG / PNG ไม่เกิน 5 MB ต่อไฟล์ เก็บในพื้นที่ส่วนตัว</p>${manage || ownManager ? '<form id="upload"><label>เลือกเอกสาร<span class="req">*</span><input type="file" name="file" accept="application/pdf,image/jpeg,image/png" required></label><button type="submit" style="margin-top:12px">อัปโหลดเอกสาร</button><p class="error" data-error></p></form>' : ""}${d.documents.map((doc: Row) => `<p><button data-document="${doc.id}">${esc(doc.title)} ↗</button></p>`).join("")}</section>` : ""}</div></div>`;
   shell(body);
   organizeApplicant(a, handoverComplete);
   if(opening)window.scrollTo({top:0});
@@ -655,6 +655,8 @@ function organizeApplicant(a: Applicant, handoverComplete: boolean) {
   const visibleTabs=detailTabs.filter(t=>groups.has(t.id));
   holder.innerHTML=`<div class="detail-tabs" role="tablist" aria-label="ข้อมูลผู้สมัคร">${visibleTabs.map(t=>`<button type="button" role="tab" id="detail-tab-${t.id}" aria-controls="detail-panel-${t.id}" data-detail-tab="${t.id}" aria-selected="false" tabindex="-1">${t.label}</button>`).join('')}</div>${visibleTabs.map(t=>`<div role="tabpanel" id="detail-panel-${t.id}" aria-labelledby="detail-tab-${t.id}" data-detail-panel="${t.id}" tabindex="0" hidden></div>`).join('')}`;
   for(const section of sections) holder.querySelector(`[data-detail-panel="${section.dataset.detailGroup}"]`)!.append(section);
+  const summary=holder.querySelector(".personal-summary");
+  if(summary)holder.querySelector('[data-detail-panel="general"]')?.prepend(summary);
   content.querySelectorAll(":scope > .split").forEach(s=>s.remove());
   content.append(holder);
   const employmentPanel=holder.querySelector('[data-detail-panel="employment"]');
@@ -667,6 +669,11 @@ function organizeApplicant(a: Applicant, handoverComplete: boolean) {
   const progress=progressState(a);
   const overview=content.querySelector<HTMLElement>(":scope > .card");
   overview?.classList.add("applicant-overview");
+  if(overview){
+    const controls=overview.querySelector('.detail-head .actions')?.innerHTML||"";
+    const matching=overview.querySelector('[data-action="match"]')?.outerHTML||"";
+    overview.innerHTML=`<div class="detail-head"><div class="identity-hero"><div class="identity-avatar">${navIcons.applicants}</div><div><h2>${esc(a.full_name)}</h2><div class="identity-badges"><span class="reference-code">${esc(applicantCode(a))}</span>${badge(a.status)}${!is('COACH')?ageBadge(ageOnDate(a.data.birth_date,today()),a.position):''}</div></div></div><div class="identity-side"><small>สมัครเมื่อ ${date(a.created_at)}</small><div class="actions">${controls}${matching}</div></div></div><div class="identity-meta"><span>${navIcons.applicants} ${position(a.position)}</span><span>${navIcons.requests} ${esc(a.hiring_unit)}</span><span>${icon('<path d="M2 6h12v11H2zM14 10h4l4 4v3h-8"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>')} ${esc(a.data.vehicle_type||'—')}</span><span>${esc(a.phone)}</span></div>`;
+  }
   const secondaryActions=overview?.querySelector<HTMLElement>(".detail-head .actions");
   if(secondaryActions?.children.length) {
     const fold=document.createElement("details");fold.className="case-actions";
@@ -676,7 +683,7 @@ function organizeApplicant(a: Applicant, handoverComplete: boolean) {
   overview?.insertAdjacentHTML("beforeend",`<ol class="recruitment-steps" aria-label="ความคืบหน้าการสมัคร">${progress.labels.map((label,i)=>`<li class="${progress.paused?(i===0?'done':'') : i<progress.current?'done':i===progress.current?'current':''}" ${i===progress.current?'aria-current="step"':''}><span>${!progress.paused&&i<progress.current?'✓':i+1}</span><small>${label}</small></li>`).join('')}</ol>${progress.paused?`<p class="hint">สถานะปัจจุบัน: ${esc(statuses[a.status])} · แถบขั้นตอนไม่ใช่ผลการรับเข้าทำงาน</p>`:''}`);
   const nextCard=document.createElement("section");nextCard.className="next-task card";
   nextCard.innerHTML=`<div><p class="section-label">งานถัดไป</p><h2>${next.label||'ติดตามสถานะ'}</h2><p class="muted">${next.hint}</p></div>${next.label?`<button class="primary" type="button" data-next-target="${next.target}" data-next-tab="${next.tab}">${next.label} →</button>`:''}`;
-  holder.before(nextCard);
+  if(overview)overview.before(nextCard);else holder.before(nextCard);
   selectDetailTab(visibleTabs.some(t=>t.id===selectedDetailTab)?selectedDetailTab:visibleTabs[0]!.id);
 }
 
@@ -884,8 +891,9 @@ async function clickAction(action: string) {
   }
   if (["admin-workspace","coach-workspace"].includes(action)) {
     screen = action === "admin-workspace" ? "admin" : "applicants";
-    filters = {search:"",status:"",unit:"",offset:0}; await render(); return;
+    filters = blankFilters(); await render(); return;
   }
+  if (action === "clear-filters") {filters=blankFilters();await render();return;}
   if (action === "reload") {
     location.reload();
     return;
@@ -1127,6 +1135,7 @@ document.addEventListener("keydown",e=>{
 document.addEventListener("change", (e) => {
   if ((e.target as Element).closest("#profile")) profileRequirements();
   const el = e.target as HTMLInputElement;
+  if(el.hasAttribute("data-list-size")){filters.size=Number(el.value);filters.offset=0;void render();return;}
   if (el.name === "position") applyDriverRequirements();
   if (el.closest("#screen")) dynamicRequirements();
   if (el.closest("#employment")) {
@@ -1150,6 +1159,8 @@ document.addEventListener("click", (e) => {
   if (!el) return;
   void (async () => {
     try {
+      if(el.dataset.sort){filters.order=el.dataset.sort===filters.sort && filters.order==='asc'?'desc':'asc';filters.sort=el.dataset.sort;filters.offset=0;await render();return;}
+      if(el.dataset.offset!==undefined){filters.offset=Number(el.dataset.offset);await render();return;}
       if (el.dataset.detailTab) {selectDetailTab(el.dataset.detailTab as DetailTab); return;}
       if (el.dataset.nextTarget) {
         selectDetailTab(el.dataset.nextTab as DetailTab);
@@ -1170,12 +1181,13 @@ document.addEventListener("click", (e) => {
       if (el.dataset.action) await clickAction(el.dataset.action);
       if (el.dataset.nav) {
         screen = el.dataset.nav;
-        filters = { search: "", status: "", unit: "", offset: 0 };
+        filters = blankFilters();
         await render();
       }
       if (el.dataset.filter) {
         screen = "applicants";
         filters = {
+          ...blankFilters(),
           search: "",
           status: el.dataset.filter,
           unit: "",
@@ -1187,7 +1199,7 @@ document.addEventListener("click", (e) => {
       if (el.dataset.page) {
         filters.offset = Math.max(
           0,
-          filters.offset + Number(el.dataset.page) * 30,
+          filters.offset + Number(el.dataset.page) * filters.size,
         );
         await render();
       }
@@ -1343,7 +1355,10 @@ document.addEventListener("submit", (e) => {
           await runAction("edit_applicant", applicantPayload(form));
           break;
         case "filters":
+          if(d.age_min!==""&&d.age_max!==""&&d.age_min!==undefined&&d.age_max!==undefined&&Number(d.age_min)>Number(d.age_max))throw Error("อายุตั้งแต่ต้องไม่มากกว่าอายุไม่เกิน");
+          if(d.from&&d.to&&String(d.from)>String(d.to))throw Error("วันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด");
           filters = {
+            ...filters,position:String(d.position||""),vehicle:String(d.vehicle||""),age_min:String(d.age_min||""),age_max:String(d.age_max||""),from:String(d.from||""),to:String(d.to||""),
             search: String(d.search || ""),
             unit: String(d.unit || ""),
             status: String(d.status || ""),

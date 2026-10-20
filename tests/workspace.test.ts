@@ -1,3 +1,4 @@
+import {ageOnDate} from '../web/domain.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {queueDefinitions,progressState,nextTask} from '../web/workspace.ts';
@@ -24,4 +25,12 @@ test('progress never depicts a closed or reserve case as successfully hired',()=
  assert.equal(progressState({status:'INTERVIEW',actual_start_date:null}).current,2);
  assert.equal(progressState({status:'HIRED',actual_start_date:null}).current,3);
  assert.equal(progressState({status:'STARTED',actual_start_date:'2026-10-20'}).current,5);
+});
+
+test('age uses completed birthdays and rejects missing or invalid birth dates',()=>{
+ assert.equal(ageOnDate('2000-10-21','2026-10-20'),25);
+ assert.equal(ageOnDate('2000-10-20','2026-10-20'),26);
+ assert.equal(ageOnDate('2026-10-21','2026-10-20'),null);
+ assert.equal(ageOnDate('2000-02-30','2026-10-20'),null);
+ assert.equal(ageOnDate(undefined,'2026-10-20'),null);
 });
