@@ -1,3 +1,4 @@
+import {installDatePickers} from "./date-picker";
 import { appAddress, configAddress, attachmentsEnabled } from "./runtime";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
@@ -336,6 +337,7 @@ async function applicantList() {
   );
 }
 function profileFields(a?: Applicant) {
+  const newApplication = !a;
   const d = a?.data || {};
   return `<div class="fields">${field("full_name", "ชื่อ – สกุล", a?.full_name || "", true, "text", 'maxlength="120"')}${select(
     "position",
@@ -365,7 +367,8 @@ function profileFields(a?: Applicant) {
       ["ว่างงาน", "ทำงานอยู่", "อื่นๆ"].map((x) => ({ value: x, label: x })),
       d.current_job_status,
     ),
-  )}${dates("available_start_date", "วันที่พร้อมเริ่มงาน", d.available_start_date)}${field("availability_note", "หมายเหตุความพร้อม", d.availability_note)}${dates("id_issued_at", "วันออกบัตรประชาชน", d.id_issued_at)}${dates("id_expires_at", "วันหมดอายุบัตรประชาชน", d.id_expires_at)}<div class="full notice">ข้อมูลรถและใบขับขี่จำเป็นเฉพาะผู้สมัครตำแหน่งพนักงานขับรถ</div>${select(
+    newApplication,
+  )}${dates("available_start_date", "วันที่พร้อมเริ่มงาน", d.available_start_date, newApplication)}${field("availability_note", "หมายเหตุความพร้อม", d.availability_note)}${dates("id_issued_at", "วันออกบัตรประชาชน", d.id_issued_at, newApplication)}${dates("id_expires_at", "วันหมดอายุบัตรประชาชน", d.id_expires_at, newApplication)}<div class="full notice">ข้อมูลรถและใบขับขี่จำเป็นเฉพาะผู้สมัครตำแหน่งพนักงานขับรถ</div>${select(
     "vehicle_type",
     "ประเภทรถ",
     opts(
@@ -382,7 +385,7 @@ function profileFields(a?: Applicant) {
       })),
       d.license_type,
     ),
-  )}${select("fuel_type", "ประเภทเชื้อเพลิง", opts(["รถก๊าซ", "รถน้ำมัน", "รถไฟฟ้า", "ได้ทั้งหมด"].map(value => ({value,label:value})), d.fuel_type))}${field("driver_license_no", "เลขใบขับขี่", d.driver_license_no)}${dates("license_issued_at", "วันออกใบขับขี่", d.license_issued_at)}${dates("license_expires_at", "วันหมดอายุใบขับขี่", d.license_expires_at)}${field("cargo_types", "สินค้าที่เคยขน", d.cargo_types)}${field("construction_brands", "วัสดุก่อสร้าง: สินค้า / ยี่ห้อ", d.construction_brands)}${field("beverage_brands", "น้ำ / โซดา / เบียร์: สินค้า / ยี่ห้อ", d.beverage_brands)}${field("other_cargo_note", "งานขนส่งอื่น", d.other_cargo_note)}${a ? note("", false, "เหตุผลแก้ไข (บังคับเมื่อเปลี่ยนหน่วยงาน)") : ""}</div>`;
+  )}${select("fuel_type", "ประเภทเชื้อเพลิง", opts(["รถก๊าซ", "รถน้ำมัน", "รถไฟฟ้า", "ได้ทั้งหมด"].map(value => ({value,label:value})), d.fuel_type))}${field("driver_license_no", "เลขใบขับขี่", d.driver_license_no)}${dates("license_issued_at", "วันออกใบขับขี่", d.license_issued_at)}${dates("license_expires_at", "วันหมดอายุใบขับขี่", d.license_expires_at)}${field("cargo_types", "สินค้าที่เคยขน", d.cargo_types, newApplication, "text", 'placeholder="หากไม่มี ให้ระบุ ไม่มี"')}${field("construction_brands", "วัสดุก่อสร้าง: สินค้า / ยี่ห้อ", d.construction_brands)}${field("beverage_brands", "น้ำ / โซดา / เบียร์: สินค้า / ยี่ห้อ", d.beverage_brands)}${field("other_cargo_note", "งานขนส่งอื่น", d.other_cargo_note, newApplication, "text", 'placeholder="หากไม่มี ให้ระบุ ไม่มี"')}${a ? note("", false, "เหตุผลแก้ไข (บังคับเมื่อเปลี่ยนหน่วยงาน)") : ""}</div>`;
 }
 function applicantPayload(form: HTMLFormElement) {
   const raw = dataOf(form);
@@ -1422,4 +1425,5 @@ document.addEventListener("submit", (e) => {
 window.addEventListener("hashchange", () => {
   if (location.hash === "#apply") void publicPage().catch(fail);
 });
+installDatePickers();
 void init();

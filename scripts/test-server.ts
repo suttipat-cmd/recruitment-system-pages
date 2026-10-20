@@ -16,6 +16,7 @@ await db.exec(
   ),
 );
 await db.exec(await readFile(new URL("../supabase/migrations/20261020105230_application_pin.sql",import.meta.url),"utf8"));
+await db.exec(await readFile(new URL("../supabase/migrations/20261020111221_required_application_fields.sql",import.meta.url),"utf8"));
 const users = [
   "admin",
   "hr",

@@ -146,3 +146,16 @@ export function requiresAgeApproval(
     (asOf.slice(5) < birth.slice(5) ? 1 : 0);
   return age < (position === "DRIVER" ? 25 : 18);
 }
+
+/** Strict local calendar date without a locale or timezone conversion. */
+export function parseCalendarDate(value: string): Date | undefined {
+  try {
+    const iso=isoDate(value);
+    if(!iso) return undefined;
+    const [year,month,day]=iso.split('-').map(Number);
+    const valueDate=new Date(0);
+    valueDate.setFullYear(year!,month!-1,day!);
+    valueDate.setHours(0,0,0,0);
+    return valueDate;
+  } catch {return undefined;}
+}
