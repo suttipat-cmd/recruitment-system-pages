@@ -5,25 +5,31 @@ export const detailTabs: {id:DetailTab;label:string}[] = [
   {id:'employment',label:'ส่งมอบ / เริ่มงาน'}, {id:'road',label:'ทดลองขับ'},
   {id:'training',label:'การอบรม'}, {id:'history',label:'ประวัติ'},
 ];
-export const queueDefinitions = (role:Role) => role === 'COACH' ? [
-  {status:'HIRED',title:'พนักงานรอเริ่มงาน',hint:'ตรวจผู้รับผิดชอบและบันทึกผลทดลองขับ',tab:'road'},
-  {status:'STARTED',title:'พนักงานเริ่มงานแล้ว',hint:'ตรวจผลทดลองขับและข้อมูลการดูแล',tab:'road'},
+export interface WorkQueue {id:string;title:string;hint:string;tab:DetailTab;status?:string;workflow_stage?:string;queue?:string;sort?:string;order?:string}
+export const queueDefinitions = (role:Role):WorkQueue[] => role === 'COACH' ? [
+ {id:'coach-pending',queue:'coach_pending',title:'งานของฉัน · รอผลทดลองขับ',hint:'เฉพาะคนที่มอบหมายให้คุณและยังไม่บันทึกผล',tab:'road'},
 ] : role === 'MANAGER' ? [
-  {status:'INTERVIEW',title:'คิวสัมภาษณ์ของหน่วยงาน',hint:'รับงานหรือทำแบบประเมินที่รับไว้ต่อ',tab:'interview'},
-  {status:'HIRED',title:'ส่งมอบและติดตามเริ่มงาน',hint:'กำหนดผู้ดูแลและข้อมูลรถให้ครบ',tab:'employment'},
-  {status:'STARTED',title:'พนักงาน / บันทึกอบรม',hint:'เปิดพนักงานเพื่อดูหรือเพิ่มผลอบรม',tab:'training'},
+ {id:'interview',status:'INTERVIEW',title:'คิวสัมภาษณ์ของหน่วยงาน',hint:'รับงานหรือทำแบบประเมินที่รับไว้ต่อ',tab:'interview'},
+ {id:'handover',workflow_stage:'HANDOVER_PENDING',title:'รอส่งมอบพนักงาน',hint:'กำหนดผู้ดูแลและข้อมูลรถให้ครบ',tab:'employment'},
+ {id:'active',workflow_stage:'ACTIVE',title:'พนักงาน / บันทึกอบรม',hint:'พนักงานที่ยังทำงานอยู่ในขอบเขตของคุณ',tab:'training'},
 ] : [
-  {status:'HR_REVIEW',title:'ใบสมัครรอตรวจ',hint:'ตรวจข้อมูลและส่ง Supervisor สัมภาษณ์',tab:'general'},
-  {status:'WAITING_INFO',title:'ติดตามข้อมูลเพิ่มเติม',hint:'เปิดใบสมัครเพื่อตรวจข้อมูลและประวัติติดต่อ',tab:'general'},
-  {status:'HIRED',title:'เตรียมและติดตามเริ่มงาน',hint:'ตรวจการส่งมอบ กำหนดนัด และวันเริ่มงานจริง',tab:'employment'},
+ {id:'review',status:'HR_REVIEW',title:'ใบสมัครรอตรวจ',hint:'ตรวจข้อมูลและส่ง Supervisor สัมภาษณ์',tab:'general'},
+ {id:'info',status:'WAITING_INFO',title:'ติดตามข้อมูลเพิ่มเติม',hint:'เรียงวันติดตามเก่าก่อน · เปิดดูข้อมูลที่รอ',tab:'general',sort:'next_date',order:'asc'},
+ {id:'interview',status:'INTERVIEW',title:'ติดตามผลสัมภาษณ์',hint:'ดูว่าใครรับงานแล้วและใครยังรอรับงาน',tab:'interview'},
+ {id:'handover',workflow_stage:'HANDOVER_PENDING',title:'รอส่งมอบพนักงาน',hint:'กรอกผู้ดูแลและข้อมูลรถให้ครบ',tab:'employment'},
+ {id:'schedule',workflow_stage:'START_DATE_PENDING',title:'รอกำหนดวันเริ่มงาน',hint:'ส่งมอบครบแล้ว ให้ HR บันทึกวันนัด',tab:'employment'},
+ {id:'today',workflow_stage:'START_TODAY',title:'นัดเริ่มงานวันนี้',hint:'ยืนยันวันจริงเมื่อมาทำงานแล้ว',tab:'employment',sort:'next_date',order:'asc'},
+ {id:'overdue',workflow_stage:'START_OVERDUE',title:'เลยวันนัด · รอยืนยัน',hint:'ตรวจสอบก่อนบันทึกเริ่มงานหรือไม่มาเริ่มงาน',tab:'employment',sort:'next_date',order:'asc'},
+ {id:'scheduled',workflow_stage:'START_SCHEDULED',title:'นัดเริ่มงานล่วงหน้า',hint:'เรียงวันนัดใกล้ที่สุดก่อน',tab:'employment',sort:'next_date',order:'asc'},
 ];
 export function progressState(a: Pick<Applicant,'status'|'actual_start_date'>) {
   const paused = !['HR_REVIEW','WAITING_INFO','INTERVIEW','HIRED','STARTED'].includes(a.status);
   const current = paused ? -1 : a.status === 'STARTED' ? 5 : a.status === 'HIRED' ? 3 : a.status === 'INTERVIEW' ? 2 : 1;
   return {paused,current,labels:['รับใบสมัคร','HR คัดกรอง','สัมภาษณ์','เตรียมเริ่มงาน','เริ่มงานจริง']};
 }
-export function nextTask(a:Pick<Applicant,'status'|'data'|'scheduled_start_date'|'actual_start_date'>, available: readonly string[]) {
+export function nextTask(a:Pick<Applicant,'status'|'data'|'scheduled_start_date'|'actual_start_date'> & Partial<Pick<Applicant,'employment_status'>>, available: readonly string[]) {
   const has=(id:string)=>available.includes(id);
+  if(a.employment_status==='RESIGNED')return {label:'',target:'',tab:'history' as DetailTab,hint:'ลาออกแล้ว สามารถตรวจรายละเอียดและประวัติได้'};
   if(a.status==='RESERVE'&&has('recall')) return {label:'ติดตาม / เรียกผู้สมัครกลับ',target:'recall',tab:'general' as DetailTab,hint:'ตรวจข้อมูลและประวัติการติดต่อก่อนเรียกกลับ'};
   if(['REJECTED','WITHDRAWN','NO_SHOW','CANCELLED'].includes(a.status)) return {label:'',target:'',tab:'history' as DetailTab,hint:'รายการนี้ปิดแล้ว สามารถตรวจรายละเอียดและประวัติได้'};
   if(['HR_REVIEW','WAITING_INFO'].includes(a.status)&&has('screen')) return {label:'ตรวจและคัดกรองผู้สมัคร',target:'screen',tab:'general' as DetailTab,hint:'ตรวจใบสมัครให้ครบ แล้วเลือกส่งสัมภาษณ์ ขอข้อมูลเพิ่ม หรือไม่ผ่าน'};

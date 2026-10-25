@@ -43,7 +43,9 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
       "utf8",
     ),
   );
-  for (const file of ["20261020105230_application_pin.sql","20261020111221_required_application_fields.sql","20261020113344_hiring_workflow_v43.sql","20261020120123_four_roles_and_request_types.sql","20261020130620_applicant_list_workspace_v47.sql"]) await db.exec(await readFile(new URL("../supabase/migrations/"+file,import.meta.url),"utf8"));
+  for (const file of ["20261020105230_application_pin.sql","20261020111221_required_application_fields.sql","20261020113344_hiring_workflow_v43.sql","20261020120123_four_roles_and_request_types.sql","20261020130620_applicant_list_workspace_v47.sql","20261025142241_workflow_visibility_v49.sql"]) await db.exec(await readFile(new URL("../supabase/migrations/"+file,import.meta.url),"utf8"));
+  // Reapplying the read-only migration must be safe and preserve all authorization paths.
+  await db.exec(await readFile(new URL("../supabase/migrations/20261025142241_workflow_visibility_v49.sql",import.meta.url),"utf8"));
   for (const [key, id] of Object.entries(ids)) {
     await db.query("insert into auth.users values($1,$2)", [
       id,
@@ -388,6 +390,49 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
     await assert.rejects(()=>cmd('hr','applicants',{age_min:40,age_max:20}));await assert.rejects(()=>cmd('hr','applicants',{size:100000}));await assert.rejects(()=>cmd('hr','applicants',{sort:'id; delete from rm_private.profiles'}));
     await assert.rejects(()=>as('hr',"select rm_private.applicant_age('2000-01-01',current_date)"));
     await db.query('delete from rm_private.applicants where id=any($1::uuid[])',[inserted.rows.map(r=>r.id)]);
+  });
+  await t.test('workflow queues filter full result before pagination, respect ownership and preserve privacy',async()=>{
+    const day=(new Date()).toLocaleDateString('en-CA',{timeZone:'Asia/Bangkok'});
+    const shift=(n:number)=>new Date(Date.parse(day+'T00:00:00Z')+n*86400000).toISOString().slice(0,10);
+    const cases=[
+      ['review','HR_REVIEW',null,null,null,'PENDING','HR_REVIEW'],
+      ['info','WAITING_INFO',null,null,null,'PENDING','WAITING_INFO'],
+      ['unclaimed','INTERVIEW',null,null,null,'PENDING','INTERVIEW_UNCLAIMED'],
+      ['interview','INTERVIEW',ids.mgr,null,null,'PENDING','INTERVIEW_IN_PROGRESS'],
+      ['handover','HIRED',ids.mgr,null,null,'PENDING','HANDOVER_PENDING'],
+      ['schedule','HIRED',ids.mgr,ids.coach,null,'PENDING','START_DATE_PENDING'],
+      ['today','HIRED',ids.mgr,ids.coach,day,'PENDING','START_TODAY'],
+      ['overdue','HIRED',ids.mgr,ids.coach,shift(-1),'PENDING','START_OVERDUE'],
+      ['future','HIRED',ids.mgr,ids.coach,shift(2),'PENDING','START_SCHEDULED'],
+      ['active','STARTED',ids.mgr,ids.coach,shift(-2),'ACTIVE','ACTIVE'],
+      ['resigned','STARTED',ids.mgr,ids.coach,shift(-2),'RESIGNED','RESIGNED'],
+      ['no-show','NO_SHOW',ids.mgr,ids.coach,shift(-2),'PENDING','NO_SHOW'],
+    ];
+    const fixtureIds:string[]=[];
+    for(const [name,status,owner,coach,scheduled,employment] of cases){
+      const row=await db.query<{id:string}>(`insert into rm_private.applicants(full_name,phone,position,original_unit,hiring_unit,status,owner_id,coach_id,supervisor_id,scheduled_start_date,employment_status,data)
+        values($1,'0894900000','DRIVER',$2,$2,$3,$4,$5,$6,$7,$8,$9) returning id`,['Flow49 '+name,unit,status,owner,coach,ids.mgr,scheduled,employment,JSON.stringify({plate:'TEST-49',fleet_type:'COMPANY',followup_date:shift(-1),national_id:'private-workflow-id',birth_date:'1990-01-01'})]);
+      fixtureIds.push(row.rows[0]!.id);
+    }
+    const list=await cmd('hr','applicants',{search:'Flow49',size:20});
+    for(const c of cases)assert.equal(list.rows.find((r:any)=>r.full_name==='Flow49 '+c[0]).workflow_stage,c[6]);
+    const overdue=await cmd('hr','applicants',{search:'Flow49',workflow_stage:'START_OVERDUE'});
+    assert.equal(overdue.total,1);assert.equal(overdue.rows[0].next_date,shift(-1));assert.equal(overdue.rows[0].status,'HIRED');
+    const info=await cmd('hr','applicants',{search:'Flow49',status:'WAITING_INFO',sort:'next_date',order:'asc'});assert.equal(info.rows[0].next_date,shift(-1));
+    assert.equal((await cmd('other','applicants',{search:'Flow49',workflow_stage:'START_TODAY'})).total,0);
+    const pending=await cmd('coach','applicants',{search:'Flow49',queue:'coach_pending'});
+    assert.equal(pending.total,5);assert.ok(pending.rows.every((r:any)=>r.coach_id===ids.coach&&r.road_test_pending&&r.workflow_stage!=='RESIGNED'));
+    assert.ok(!JSON.stringify(pending).includes('private-workflow-id'));assert.ok(!JSON.stringify(pending).includes('birth_date'));
+    await db.query("update rm_private.applicants set data=data||'{\"road_test_result\":\"PASS\"}'::jsonb where full_name='Flow49 today'");
+    assert.equal((await cmd('coach','applicants',{search:'Flow49',queue:'coach_pending'})).total,4);
+    await assert.rejects(()=>cmd('hr','applicants',{queue:'coach_pending'}));await assert.rejects(()=>cmd('hr','applicants',{workflow_stage:'INVALID'}));
+    // More than one page of owned pending work plus an unassigned record, no page-local filtering.
+    await db.query(`insert into rm_private.applicants(full_name,phone,position,original_unit,hiring_unit,status,coach_id)
+       select 'Flow49 page '||n,'0894900001','DRIVER',$1,$1,'HIRED',$2 from generate_series(1,12) n`,[unit,ids.coach]);
+    const page=await cmd('coach','applicants',{search:'Flow49 page',queue:'coach_pending',size:10,offset:10});assert.equal(page.total,12);assert.equal(page.rows.length,2);
+    await assert.rejects(()=>as('hr',"select rm_private.workflow_date('2026-10-25')"));
+    assert.equal((await db.query<{d:string|null}>("select rm_private.workflow_date('2026-02-30') as d")).rows[0]!.d,null);
+    await db.query("delete from rm_private.applicants where full_name like 'Flow49 %'");
   });
   await t.test(
     "live profile deactivation, self-demotion guard and public submission gating",

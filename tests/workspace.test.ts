@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {queueDefinitions,progressState,nextTask} from '../web/workspace.ts';
 const applicant={status:'HIRED',data:{},scheduled_start_date:null,actual_start_date:null};
 test('role work queues separate screening, interview and coach tasks',()=>{
- assert.deepEqual(queueDefinitions('HR').map(q=>q.status),['HR_REVIEW','WAITING_INFO','HIRED']);
+ assert.deepEqual(queueDefinitions('HR').filter(q=>q.status).map(q=>q.status),['HR_REVIEW','WAITING_INFO','INTERVIEW']);
  assert.equal(queueDefinitions('MANAGER')[0]!.tab,'interview');
  assert.equal(queueDefinitions('COACH')[0]!.tab,'road');
 });

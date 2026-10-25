@@ -108,6 +108,12 @@ export interface Profile {
   version: number;
 }
 export interface Applicant {
+  workflow_stage?: string;
+  handover_missing?: string[];
+  road_test_pending?: boolean;
+  next_date?: string|null;
+  latest_at?: string;
+  latest_action?: string|null;
   applicant_code?: string;
   age_years?: number|null;
   age_eligible?: boolean|null;

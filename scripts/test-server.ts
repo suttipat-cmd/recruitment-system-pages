@@ -20,6 +20,7 @@ await db.exec(await readFile(new URL("../supabase/migrations/20261020111221_requ
 await db.exec(await readFile(new URL("../supabase/migrations/20261020113344_hiring_workflow_v43.sql",import.meta.url),"utf8"));
 await db.exec(await readFile(new URL("../supabase/migrations/20261020120123_four_roles_and_request_types.sql",import.meta.url),"utf8"));
 await db.exec(await readFile(new URL("../supabase/migrations/20261020130620_applicant_list_workspace_v47.sql",import.meta.url),"utf8"));
+await db.exec(await readFile(new URL("../supabase/migrations/20261025142241_workflow_visibility_v49.sql",import.meta.url),"utf8"));
 const users = [
   "admin",
   "hr",
