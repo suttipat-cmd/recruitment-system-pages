@@ -1,3 +1,9 @@
+## V4.10.0: Google Drive attachments
+
+รัน `supabase/migrations/20261025152924_google_drive_attachments_v410.sql` หนึ่งครั้งภายใน transaction ต่อจาก V4.9 สคริปต์ตรวจ fingerprint ฟังก์ชันเดิม เพิ่มตารางส่วนตัวพร้อม RLS และยังปิด Bridge เป็นค่าเริ่มต้น ไม่ต้องล้างข้อมูล
+
+Deploy Apps Script จาก `integrations/google-drive` ตาม SETUP-TH.md แล้วนำ URL /exec และ hash ที่ setupBridge แสดงมาใส่ใน drive_config จึงค่อย enabled=true ไม่ใช้ service_role ใน Apps Script หรือหน้าเว็บ โค้ดเว็บตรวจสถานะจากฐานข้อมูลและไม่ต้อง build ใหม่เมื่อเปิด Bridge
+
 ## V4.9.0
 
 ฐาน V4.7–V4.8: รัน `supabase/migrations/20261025142241_workflow_visibility_v49.sql` ภายใน transaction ก่อนเผยแพร่ UI ระบบตรวจ fingerprint ของฟังก์ชันอ่านเดิมและหยุดหากไม่ตรง ฟังก์ชันใหม่คง `can_read` และการจำกัดข้อมูล Coach ไว้ทั้งหมด ไม่มีการแก้ applicant/profile rows หรือคำสั่ง mutation

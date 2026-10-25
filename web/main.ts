@@ -1,3 +1,4 @@
+import {cancelDriveRequests,formatFileSize,initDrive,prepareUploads,uploadBatch,listDocuments,readDocument,recoverDocument,type UploadItem,type DriveDocument} from "./drive";
 import {workflowSummary,workflowLabels} from "./workflow";
 import {detailTabs,queueDefinitions,progressState,nextTask,type DetailTab} from "./workspace";
 import {installDatePickers} from "./date-picker";
@@ -165,6 +166,7 @@ function numberTableRows(container: ParentNode) {
   }
 }
 function openModal(title: string, body: string, formId?: string) {
+  delete modal.dataset.pdfRequest;
   modal.innerHTML = `${button("✕", "close-modal", "close")}<h2 id="dialog-title">${title}</h2>${formId ? `<form id="${formId}">${body}<div class="actions"><button class="primary" type="submit">บันทึก</button>${button("ยกเลิก", "close-modal")}</div><p class="error" data-error></p></form>` : body}`;
   modal.setAttribute("aria-labelledby","dialog-title");
   numberTableRows(modal);
@@ -200,6 +202,7 @@ async function init() {
         detectSessionInUrl: true,
       },
     });
+    await initDrive(db);
     db.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") {
         recovery = true;
@@ -234,6 +237,7 @@ async function init() {
   }
 }
 function login() {
+  modal.close();modal.replaceChildren();cancelDriveRequests();clearAttachmentViews(); uploadJobs.clear();publicReceipt=null;
   root.innerHTML = `<main class="login card"><div class="brand">Recruitment System<small>รับสมัคร • สัมภาษณ์ • ดูแลพนักงาน</small></div><h2>เข้าสู่ระบบ</h2><p class="muted">ใช้อีเมลที่ Admin เปิดสิทธิ์ให้แล้ว</p><form id="login">${field("email", "อีเมล", "", true, "email", 'autocomplete="username"')}${field("password", "รหัสผ่าน", "", true, "password", 'autocomplete="current-password"')}<button type="submit" class="primary">เข้าสู่ระบบ</button><p data-error class="error"></p></form></main>`;
 }
 async function load() {
@@ -253,6 +257,25 @@ async function load() {
   settings = snapshot.settings;
   await render();
 }
+modal.addEventListener('close',()=>{delete modal.dataset.pdfRequest;for(const frame of modal.querySelectorAll<HTMLIFrameElement>('[data-private-pdf]')){const url=frame.dataset.privatePdf!;URL.revokeObjectURL(url);previewUrls.delete(url);frame.src='about:blank';}});
+const selectedBatches=new WeakMap<HTMLInputElement,Promise<UploadItem[]>>();
+const visibleDocuments=new Map<string,DriveDocument>();
+const previewUrls=new Set<string>();
+const uploadJobs=new Map<string,UploadItem[]>();
+let publicReceipt:{id:string;code:string;token:string;items:UploadItem[];busy:boolean}|null=null;
+function revokeInside(holder:Element){for(const img of holder.querySelectorAll<HTMLImageElement>('img'))if(img.src.startsWith('blob:')){URL.revokeObjectURL(img.src);previewUrls.delete(img.src);}}
+function clearAttachmentViews(){for(const url of previewUrls)URL.revokeObjectURL(url);previewUrls.clear();visibleDocuments.clear();}
+function attachmentFields(){return `<div class="attachment-fields full"><p class="hint">เลือกได้สูงสุด 10 ไฟล์ต่อครั้ง · JPG, PNG, PDF · ไม่เกิน 10 MB/ไฟล์</p>${!attachmentsEnabled?'<p class="notice">ขณะนี้ยังไม่เปิดรับไฟล์แนบ สามารถส่งใบสมัครโดยไม่แนบไฟล์ได้</p>':''}<label>เลือกภาพหรือไฟล์ (ไม่บังคับ)<input type="file" name="attachments" accept="image/jpeg,image/png,application/pdf,.jpg,.jpeg,.png,.pdf" multiple ${attachmentsEnabled?'':'disabled'}></label><div data-selected-files class="selected-files" aria-live="polite"></div><button type="button" data-action="clear-attachments">ล้างไฟล์ที่เลือก</button></div>`;}
+async function selectedUploads(form:HTMLFormElement){const input=form.querySelector<HTMLInputElement>('[name="attachments"]');if(!input||input.disabled)return [];if(!selectedBatches.has(input)){const promise=prepareUploads(Array.from(input.files||[]));void promise.catch(()=>{});selectedBatches.set(input,promise);}return await selectedBatches.get(input)!;}
+async function previewSelection(input:HTMLInputElement){const holder=input.closest('form')?.querySelector<HTMLElement>('[data-selected-files]');if(!holder)return;revokeInside(holder);holder.innerHTML='<p>กำลังตรวจไฟล์…</p>';const promise=prepareUploads(Array.from(input.files||[]));selectedBatches.set(input,promise);try{const items=await promise;if(selectedBatches.get(input)!==promise||!holder.isConnected)return;holder.innerHTML=items.map(item=>`<div class="selected-file" data-selected-id="${item.id}"><b>${esc(item.file.name)}</b><small>${formatFileSize(item.file.size)}</small>${item.mime.startsWith('image/')?'<img alt="ภาพที่เลือก" loading="lazy">':'<span class="pdf-mark">PDF</span>'}</div>`).join('');for(const item of items){if(item.mime.startsWith('image/')){const img=holder.querySelector<HTMLImageElement>(`[data-selected-id="${item.id}"] img`);if(img){const url=URL.createObjectURL(item.file);previewUrls.add(url);img.src=url;}}}}catch(e){if(selectedBatches.get(input)===promise)holder.innerHTML=`<p class="error">${esc(e instanceof Error?e.message:e)}</p>`;}}
+function jobMarkup(items:UploadItem[]){return `<ul class="upload-status">${items.map(x=>`<li><b>${esc(x.file.name)}</b><span>${({waiting:'รอส่ง',uploading:'กำลังส่ง…',done:'ส่งสำเร็จ',failed:'ยังไม่สำเร็จ'})[x.state]}</span>${x.error?`<small class="error">${esc(x.error)}</small>`:''}</li>`).join('')}</ul>`;}
+function renderUploadJob(id:string){const holder=root.querySelector<HTMLElement>(`[data-upload-job="${id}"]`);const items=uploadJobs.get(id);if(!holder||!items)return;const busy=items.some(x=>x.state==='uploading');if(items.every(x=>x.state==='done')){holder.innerHTML=`<p class="notice">แนบไฟล์สำเร็จ ${items.length} รายการ</p>`;return;}holder.innerHTML=jobMarkup(items)+(items.some(x=>x.state==='failed')?`<button type="button" data-retry-upload="${id}" ${busy?'disabled':''}>ลองส่งรายการที่ยังไม่สำเร็จ</button>`:'');}
+async function runStaffUpload(id:string){const items=uploadJobs.get(id);if(!items||items.some(x=>x.state==='uploading'))return;renderUploadJob(id);root.querySelector(`[data-upload-job="${id}"]`)?.scrollIntoView({block:'center',behavior:'smooth'});await uploadBatch(id,items,()=>renderUploadJob(id));await refreshDocuments(id);if(items.every(x=>x.state==='done'))toast('แนบไฟล์ครบแล้ว');else toast('ใบสมัครยังอยู่ครบ มีไฟล์บางรายการที่ต้องลองส่งใหม่');}
+function receiptView(){if(!publicReceipt)return;clearAttachmentViews();const r=publicReceipt;root.innerHTML=`${publicHeader()}<main class="submission-receipt card"><h1>ได้รับใบสมัครแล้ว</h1><p>HR จะติดต่อกลับตามเบอร์ที่ระบุ</p><p>เลขอ้างอิง <b>${esc(r.code)}</b></p>${r.items.length?`<h2>ผลการส่งไฟล์แนบ</h2><p>ใบสมัครถูกบันทึกแล้ว ไม่ต้องกรอกหรือส่งใบสมัครซ้ำ</p>${jobMarkup(r.items)}${r.items.some(x=>x.state==='failed')?`<p class="notice">กดส่งเฉพาะไฟล์ที่ยังไม่สำเร็จได้ในหน้านี้ หากปิดหน้าไปแล้ว กรุณาติดต่อ HR เพื่อแนบเพิ่ม</p><button type="button" class="primary" data-action="retry-public-files" ${r.busy?'disabled':''}>ลองส่งไฟล์ที่เหลือ</button>`:''}${r.busy?'<p role="status">กำลังส่งไฟล์ กรุณาเปิดหน้านี้ไว้…</p>':''}`:''}</main>`;}
+async function continuePublicUploads(){if(!publicReceipt||publicReceipt.busy)return;publicReceipt.busy=true;receiptView();await uploadBatch(publicReceipt.id,publicReceipt.items,receiptView,publicReceipt.token);if(publicReceipt){publicReceipt.busy=false;receiptView();}}
+async function refreshDocuments(id:string){const holder=root.querySelector<HTMLElement>(`[data-drive-panel="${id}"]`);if(!holder)return;try{const docs=await listDocuments(id);if(!holder.isConnected)return;for(const doc of docs)visibleDocuments.set(doc.id,doc);revokeInside(holder);holder.innerHTML=docs.length?`<div class="document-grid">${docs.map(doc=>`<article class="document-card"><h3>${esc(doc.filename)}</h3><small>${formatFileSize(doc.byte_size)} · ${date(doc.created_at)}</small>${doc.state==='PENDING'?`<p class="notice warn">การอัปโหลดอาจยังไม่สมบูรณ์</p><button type="button" data-drive-recover="${doc.id}">ตรวจไฟล์ที่ส่งค้าง</button>`:doc.mime_type.startsWith('image/')?`<div data-image-holder="${doc.id}"><p role="status">กำลังโหลดภาพ…</p><img alt="${esc(doc.filename)}" loading="lazy" hidden></div><button type="button" data-drive-download="${doc.id}">ดาวน์โหลดภาพ</button>`:`<div class="pdf-mark">PDF</div><div class="actions"><button type="button" data-drive-open="${doc.id}">เปิดดู PDF</button><button type="button" data-drive-download="${doc.id}">ดาวน์โหลด PDF</button></div>`}</article>`).join('')}</div>`:'<p class="muted">ยังไม่มีไฟล์แนบ</p>';let cursor=0;const images=docs.filter(x=>x.state==='READY'&&x.mime_type.startsWith('image/'));const worker=async()=>{while(cursor<images.length&&holder.isConnected){const doc=images[cursor++]!;await showImage(doc);}};await Promise.all([worker(),worker()]);}catch(e){if(holder.isConnected)holder.innerHTML=`<p class="error">${esc(e instanceof Error?e.message:e)}</p><button type="button" data-action="refresh">ลองโหลดเอกสารใหม่</button>`;}}
+async function showImage(doc:DriveDocument){const holder=root.querySelector<HTMLElement>(`[data-image-holder="${doc.id}"]`);if(!holder)return;const img=holder.querySelector<HTMLImageElement>('img')!;try{const blob=await readDocument(doc);if(!img.isConnected)return;const url=URL.createObjectURL(blob);previewUrls.add(url);img.onerror=()=>{if(holder.isConnected){const p=document.createElement('p');p.className='error';p.textContent='ภาพอาจเสียหาย สามารถดาวน์โหลดไฟล์เดิมไปตรวจสอบได้';holder.prepend(p);}};img.src=url;img.hidden=false;holder.querySelector('p')?.remove();holder.querySelector('button')?.remove();}catch(e){if(holder.isConnected){holder.querySelector('p')!.textContent=e instanceof Error?e.message:'โหลดภาพไม่สำเร็จ';if(!holder.querySelector('button'))holder.insertAdjacentHTML('beforeend',`<button type="button" data-drive-preview="${doc.id}">ลองโหลดภาพใหม่</button>`);}}}
+
 const icon = (paths:string) => `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
 const navIcons: Record<string,string> = {
  dashboard:icon('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>'),
@@ -284,6 +307,7 @@ function compactForms() {
   }
 }
 function shell(body: string) {
+  clearAttachmentViews();
   const nav = [
     ["dashboard", "ภาพรวม / งานที่ต้องทำ"],
     ["applicants", is("ADMIN", "HR", "MANAGER") ? "ผู้สมัคร" : "พนักงาน"],
@@ -293,7 +317,7 @@ function shell(body: string) {
     ...(is("ADMIN") ? [["admin", "ตั้งค่าระบบ"]] : []),
   ];
   const navButton = (key:string,label:string) => `<button type="button" data-nav="${key}" title="${label}" aria-label="${label}" ${screen === key ? 'aria-current="page"' : ''} class="${screen === key ? "active" : ""}"><span class="nav-icon" aria-hidden="true">${navIcons[key]}</span><span class="nav-label">${label}</span></button>`;
-  root.innerHTML = `<div class="shell" data-role="${profile.role}"><aside class="sidebar" aria-label="เมนูหลัก"><div class="brand"><span class="brand-mark">${navIcons.applicants}</span><span class="nav-label">Recruitment<small>MANAGEMENT · V4.9</small></span></div><button class="mobile-menu" type="button" data-action="toggle-menu" aria-expanded="false" aria-label="เปิดหรือปิดเมนู">☰ เมนู</button><nav>${nav.map(([key,label]) => navButton(key!,label!)).join("")}</nav><div class="bottom"><button type="button" data-action="apply" title="แบบฟอร์มสมัครงาน" aria-label="แบบฟอร์มสมัครงาน"><span class="nav-icon" aria-hidden="true">↗</span><span class="nav-label">แบบฟอร์มสมัครงาน</span></button><div class="profile"><span class="avatar" aria-hidden="true">${esc(profile.display_name.slice(0,1))}</span><span class="nav-label">${esc(profile.display_name)}<small>${roles[profile.role]}</small></span></div><button type="button" data-action="logout" title="ออกจากระบบ" aria-label="ออกจากระบบ"><span class="nav-icon" aria-hidden="true">⇥</span><span class="nav-label">ออกจากระบบ</span></button></div></aside><main class="content"><div class="workspace-context"><span>${roles[profile.role]} Workspace</span><span>${esc(is("MANAGER") ? profile.all_units ? "ทุกหน่วยงาน · สิทธิ์พิเศษ" : profile.units.join(" · ") : "Recruitment System")}</span></div>${body}</main></div>`;
+  root.innerHTML = `<div class="shell" data-role="${profile.role}"><aside class="sidebar" aria-label="เมนูหลัก"><div class="brand"><span class="brand-mark">${navIcons.applicants}</span><span class="nav-label">Recruitment<small>MANAGEMENT · V4.10</small></span></div><button class="mobile-menu" type="button" data-action="toggle-menu" aria-expanded="false" aria-label="เปิดหรือปิดเมนู">☰ เมนู</button><nav>${nav.map(([key,label]) => navButton(key!,label!)).join("")}</nav><div class="bottom"><button type="button" data-action="apply" title="แบบฟอร์มสมัครงาน" aria-label="แบบฟอร์มสมัครงาน"><span class="nav-icon" aria-hidden="true">↗</span><span class="nav-label">แบบฟอร์มสมัครงาน</span></button><div class="profile"><span class="avatar" aria-hidden="true">${esc(profile.display_name.slice(0,1))}</span><span class="nav-label">${esc(profile.display_name)}<small>${roles[profile.role]}</small></span></div><button type="button" data-action="logout" title="ออกจากระบบ" aria-label="ออกจากระบบ"><span class="nav-icon" aria-hidden="true">⇥</span><span class="nav-label">ออกจากระบบ</span></button></div></aside><main class="content"><div class="workspace-context"><span>${roles[profile.role]} Workspace</span><span>${esc(is("MANAGER") ? profile.all_units ? "ทุกหน่วยงาน · สิทธิ์พิเศษ" : profile.units.join(" · ") : "Recruitment System")}</span></div>${body}</main></div>`;
   compactForms();
   numberTableRows(root);
 }
@@ -352,6 +376,7 @@ function workflowDate(a:Applicant) {
  return `<span class="${w.late?'text-danger':''}">${date(w.nextDate)}</span>${w.nextDate?`<small class="cell-secondary">${w.dateLabel}${w.late?' · เลยกำหนด':''}</small>`:''}`;
 }
 function applicantCode(a:Applicant) {
+ if(a.document_code)return a.document_code;
  if(a.applicant_code)return a.applicant_code;
  const stamp=new Date(a.created_at);
  const day=Number.isNaN(stamp.getTime())?"":new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Bangkok",year:"numeric",month:"2-digit",day:"2-digit"}).format(stamp).replaceAll("-","");
@@ -444,7 +469,7 @@ function profileFields(a?: Applicant) {
 }
 function applicantPayload(form: HTMLFormElement) {
   const raw = dataOf(form);
-  const { full_name, phone, unit, position, note, ...data } = raw;
+  const { full_name, phone, unit, position, note, attachments: _attachments, ...data } = raw;
   return { full_name, phone, unit, position, note, data };
 }
 function applyDriverRequirements() {
@@ -488,7 +513,7 @@ function publicApplicationForm() {
     {title:"ประสบการณ์และใบขับขี่", hint:"ช่องที่มี * จำเป็นสำหรับตำแหน่งพนักงานขับรถ", names:["vehicle_type","license_type","driver_license_no","fuel_type","license_issued_at","license_expires_at","cargo_types","construction_brands","beverage_brands","other_cargo_note"]},
   ];
   const sections = groups.map((g,i) => `<section class="apply-section"><div class="apply-section-heading"><span>${i+1}</span><div><h2>${g.title}</h2><p>${g.hint}</p></div></div><div class="fields">${g.names.map(name => fields.querySelector(`[name="${name}"]`)?.closest("label")?.outerHTML || "").join("")}</div></section>`).join("");
-  root.innerHTML = `${publicHeader()}<main class="apply-layout"><aside class="apply-intro"><p class="section-label">มาร่วมงานกับเรา</p><h1>เริ่มต้นงานใหม่ <br>ไปด้วยกัน</h1><p>กรอกข้อมูลสมัครงานให้ครบถ้วน<br>แล้วฝ่าย HR จะติดต่อกลับ</p><div class="apply-help"><b>เตรียมข้อมูลก่อนสมัคร</b><p>บัตรประชาชน · เบอร์โทรศัพท์<br>ข้อมูลใบขับขี่ สำหรับพนักงานขับรถ</p><small>ยังไม่ต้องแนบภาพหรือเอกสาร</small></div></aside><div class="apply-body"><div class="apply-title"><p class="section-label">ใบสมัครออนไลน์</p><h1>สมัครงานกับเรา</h1><p>ช่อง <span class="req">*</span> จำเป็นต้องกรอก · วันที่ใช้ ค.ศ.</p></div><form id="public-apply">${sections}<section class="apply-section apply-consent"><label class="check"><input type="checkbox" name="consent" required><span>ยินยอมให้ใช้ข้อมูลเพื่อการสรรหาและติดต่อกลับ <span class="req">*</span></span></label><p class="muted">ตรวจข้อมูลก่อนส่ง โดยเฉพาะเบอร์โทรศัพท์และหน่วยงานที่สมัคร</p><p class="error" data-error role="alert"></p><button class="primary apply-submit" type="submit">ส่งใบสมัคร →</button></section></form></div></main>`;
+  root.innerHTML = `${publicHeader()}<main class="apply-layout"><aside class="apply-intro"><p class="section-label">มาร่วมงานกับเรา</p><h1>เริ่มต้นงานใหม่ <br>ไปด้วยกัน</h1><p>กรอกข้อมูลสมัครงานให้ครบถ้วน<br>แล้วฝ่าย HR จะติดต่อกลับ</p><div class="apply-help"><b>เตรียมข้อมูลก่อนสมัคร</b><p>บัตรประชาชน · เบอร์โทรศัพท์<br>ข้อมูลใบขับขี่ สำหรับพนักงานขับรถ</p><small>แนบ JPG, PNG หรือ PDF ได้ตามต้องการ ไม่บังคับ</small></div></aside><div class="apply-body"><div class="apply-title"><p class="section-label">ใบสมัครออนไลน์</p><h1>สมัครงานกับเรา</h1><p>ช่อง <span class="req">*</span> จำเป็นต้องกรอก · วันที่ใช้ ค.ศ.</p></div><form id="public-apply">${sections}<section class="apply-section"><h2>ไฟล์แนบ (ไม่บังคับ)</h2>${attachmentFields()}</section><section class="apply-section apply-consent"><label class="check"><input type="checkbox" name="consent" required><span>ยินยอมให้ใช้ข้อมูลเพื่อการสรรหาและติดต่อกลับ <span class="req">*</span></span></label><p class="muted">ตรวจข้อมูลก่อนส่ง โดยเฉพาะเบอร์โทรศัพท์และหน่วยงานที่สมัคร</p><p class="error" data-error role="alert"></p><button class="primary apply-submit" type="submit">ส่งใบสมัคร →</button></section></form></div></main>`;
   applyDriverRequirements();
 }
 async function publicPage() {
@@ -664,9 +689,10 @@ async function openApplicant(id: string, requestedTab?: DetailTab) {
         : `<p class="muted">${is("HR","MANAGER") ? "ยังไม่มีหัวข้อประเภทใหม่ที่ตรงกับพนักงานนี้ กรุณาเพิ่มหัวข้ออบรม" : "บันทึกอบรมได้เฉพาะ HR และ Supervisor ในหน่วยงาน"}</p>`
     }${is("HR","MANAGER") ? button("+ เพิ่มหัวข้ออบรม", "new-topic") : ""}<div class="table-wrap"><table><thead><tr><th>หัวข้อ</th><th>วันที่</th><th>ผล</th><th></th></tr></thead><tbody>${d.training.map((tr: Row) => `<tr><td>${esc(tr.title)}<br><small>${categories[tr.category] || "ประเภทเดิม"} · ${esc(tr.note)}</small></td><td>${date(tr.training_date)}</td><td>${tr.result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</td><td>${Object.hasOwn(categories,tr.category) && canTrain(profile.role, profile.units, a, profile.id, tr.category, !!profile.all_units) ? `<button data-training="${tr.id}">แก้ไข</button>` : ""}</td></tr>`).join("")}</tbody></table></div></section>`;
   }
-  body += `<section class="card" data-detail-group="history"><h2>ประวัติการดำเนินการ</h2>${d.activities.map((e: Row) => `<div class="timeline"><small>${date(e.created_at)} · ${esc(e.display_name || "ผู้สมัคร")}</small><p><b>${esc(actionLabel(e.action))}</b></p><p>${esc(e.note)}</p></div>`).join("")}</section></div><div>${personalSummary(a)}${hired ? `<section class="card" data-detail-group="employment"><h2>ข้อมูลดูแลพนักงาน</h2><div class="keyvals"><div><small>Coach</small>${esc(person(a.coach_id))}</div><div><small>Supervisor</small>${esc(person(a.supervisor_id))}</div><div><small>ทะเบียน / รถ</small>${esc(a.data.plate || "—")} / ${fleet(a.data.fleet_type)}</div><div><small>เริ่มงานจริง</small>${date(a.actual_start_date)}</div><div><small>สถานะงาน</small>${a.employment_status === "RESIGNED" ? "ลาออก" : a.employment_status === "ACTIVE" ? "ทำงานอยู่" : "รอเริ่มงาน"}</div><div><small>ลาออก</small>${date(a.resignation_date)}</div></div></section>` : ""}${evals.length ? `<section class="card" data-detail-group="history"><h2>ประวัติสัมภาษณ์</h2>${evals.map((e) => `<div class="slot"><b>รอบ ${e.round + 1} · ${e.stage === "DRAFT" ? "แบบร่าง" : e.result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</b><p>คะแนน ${e.score || "—"}</p><p>ประเภทเชื้อเพลิง ${esc(e.fuel || "—")}</p><p>${esc(e.note)}</p><small>${esc(person(e.evaluator_id))} · ${date(e.updated_at)}</small></div>`).join("")}</section>` : ""}${attachmentsEnabled && is("ADMIN", "HR", "MANAGER") ? `<section class="card" data-detail-group="general"><h2>เอกสารประกอบ</h2><p class="muted">PDF / JPG / PNG ไม่เกิน 5 MB ต่อไฟล์ เก็บในพื้นที่ส่วนตัว</p>${manage || ownManager ? '<form id="upload"><label>เลือกเอกสาร<span class="req">*</span><input type="file" name="file" accept="application/pdf,image/jpeg,image/png" required></label><button type="submit" style="margin-top:12px">อัปโหลดเอกสาร</button><p class="error" data-error></p></form>' : ""}${d.documents.map((doc: Row) => `<p><button data-document="${doc.id}">${esc(doc.title)} ↗</button></p>`).join("")}</section>` : ""}</div></div>`;
+  body += `<section class="card" data-detail-group="history"><h2>ประวัติการดำเนินการ</h2>${d.activities.map((e: Row) => `<div class="timeline"><small>${date(e.created_at)} · ${esc(e.display_name || "ผู้สมัคร")}</small><p><b>${esc(actionLabel(e.action))}</b></p><p>${esc(e.note)}</p></div>`).join("")}</section></div><div>${personalSummary(a)}${hired ? `<section class="card" data-detail-group="employment"><h2>ข้อมูลดูแลพนักงาน</h2><div class="keyvals"><div><small>Coach</small>${esc(person(a.coach_id))}</div><div><small>Supervisor</small>${esc(person(a.supervisor_id))}</div><div><small>ทะเบียน / รถ</small>${esc(a.data.plate || "—")} / ${fleet(a.data.fleet_type)}</div><div><small>เริ่มงานจริง</small>${date(a.actual_start_date)}</div><div><small>สถานะงาน</small>${a.employment_status === "RESIGNED" ? "ลาออก" : a.employment_status === "ACTIVE" ? "ทำงานอยู่" : "รอเริ่มงาน"}</div><div><small>ลาออก</small>${date(a.resignation_date)}</div></div></section>` : ""}${evals.length ? `<section class="card" data-detail-group="history"><h2>ประวัติสัมภาษณ์</h2>${evals.map((e) => `<div class="slot"><b>รอบ ${e.round + 1} · ${e.stage === "DRAFT" ? "แบบร่าง" : e.result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</b><p>คะแนน ${e.score || "—"}</p><p>ประเภทเชื้อเพลิง ${esc(e.fuel || "—")}</p><p>${esc(e.note)}</p><small>${esc(person(e.evaluator_id))} · ${date(e.updated_at)}</small></div>`).join("")}</section>` : ""}${attachmentsEnabled ? `<section class="card" data-detail-group="documents"><h2>เอกสารแนบ</h2><p class="muted">รูปภาพแสดงอัตโนมัติ · JPG, PNG และ PDF ไม่เกิน 10 MB/ไฟล์</p>${is('ADMIN','HR')?`<form id="upload">${attachmentFields()}<button type="submit" class="primary">แนบไฟล์เพิ่ม</button><p class="error" data-error></p></form>`:''}<div data-upload-job="${a.id}"></div><div data-drive-panel="${a.id}" aria-live="polite">กำลังโหลดเอกสาร…</div></section>`:''}</div></div>`;
   shell(body);
   organizeApplicant(a, handoverComplete);
+  if(attachmentsEnabled){renderUploadJob(a.id);void refreshDocuments(a.id);}
   if(opening)window.scrollTo({top:0});
   dynamicRequirements();
 }
@@ -721,6 +747,7 @@ function organizeApplicant(a: Applicant, handoverComplete: boolean) {
 }
 
 function actionLabel(a: string) {
+  if(a === "DRIVE_DOCUMENT_ADDED")return "แนบเอกสารใน Google Drive";
   return (
     (
       {
@@ -974,7 +1001,7 @@ async function clickAction(action: string) {
     return;
   }
   if (action === "new-applicant") {
-    openModal("เพิ่มผู้สมัคร", profileFields(), "new-applicant");
+    openModal("เพิ่มผู้สมัคร", profileFields()+attachmentFields(), "new-applicant");
     applyDriverRequirements();
     return;
   }
@@ -1156,6 +1183,7 @@ document.addEventListener("keydown",e=>{
 document.addEventListener("change", (e) => {
   if ((e.target as Element).closest("#profile")) profileRequirements();
   const el = e.target as HTMLInputElement;
+  if(el.name==='attachments'){void previewSelection(el);return;}
   if(el.hasAttribute("data-list-size")){filters.size=Number(el.value);filters.offset=0;void render();return;}
   if (el.name === "position") applyDriverRequirements();
   if (el.closest("#screen")) dynamicRequirements();
@@ -1294,20 +1322,14 @@ document.addEventListener("click", (e) => {
           "training-edit",
         );
       }
-      if (el.dataset.document && detail && attachmentsEnabled) {
-        const doc = detail.documents.find(
-          (x: Row) => x.id === el.dataset.document,
-        );
-        const { data, error } = await db.storage
-          .from("recruitment-documents")
-          .createSignedUrl(doc.path, 60);
-        if (error) throw error;
-        const a = document.createElement("a");
-        a.href = data.signedUrl;
-        a.target = "_blank";
-        a.rel = "noopener noreferrer";
-        a.click();
-      }
+      if(el.dataset.driveOpen){const doc=visibleDocuments.get(el.dataset.driveOpen);if(doc){const token=crypto.randomUUID();openModal('กำลังโหลด PDF','<p role="status">กำลังตรวจสิทธิ์และโหลดเอกสาร…</p>');modal.dataset.pdfRequest=token;try{const blob=await readDocument(doc);if(!modal.open||modal.dataset.pdfRequest!==token)return;const url=URL.createObjectURL(blob);previewUrls.add(url);openModal(esc(doc.filename),`<iframe data-private-pdf="${url}" class="pdf-preview" src="${url}" title="${esc(doc.filename)}"></iframe><p class="hint">หากอุปกรณ์ไม่รองรับการดู PDF ในหน้าเว็บ สามารถดาวน์โหลดได้</p><a class="button" href="${url}" download="${esc(doc.filename)}">ดาวน์โหลด PDF</a>`);}catch(e){if(modal.open&&modal.dataset.pdfRequest===token)openModal('โหลดเอกสารไม่สำเร็จ',`<p class="error">${esc(e instanceof Error?e.message:e)}</p>`);}}return;}
+      if(el.dataset.driveDownload){const doc=visibleDocuments.get(el.dataset.driveDownload);if(doc){el.setAttribute('disabled','');try{const blob=await readDocument(doc);const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=doc.filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}finally{el.removeAttribute('disabled');}}return;}
+      if(el.dataset.drivePreview){const doc=visibleDocuments.get(el.dataset.drivePreview);if(doc)await showImage(doc);return;}
+      if(el.dataset.driveRecover){const doc=visibleDocuments.get(el.dataset.driveRecover);if(doc){el.setAttribute('disabled','');try{await recoverDocument(doc);await refreshDocuments(doc.applicant_id);toast('ตรวจไฟล์และบันทึกสำเร็จ');}finally{el.removeAttribute('disabled');}}return;}
+      if(el.dataset.retryUpload){await runStaffUpload(el.dataset.retryUpload);return;}
+      if(el.dataset.action==='retry-public-files'){await continuePublicUploads();return;}
+      if(el.dataset.action==='clear-attachments'){const form=el.closest('form');const input=form?.querySelector<HTMLInputElement>('[name="attachments"]');if(input){input.value='';selectedBatches.delete(input);const holder=form?.querySelector<HTMLElement>('[data-selected-files]');if(holder){revokeInside(holder);holder.replaceChildren();}}return;}
+
     } catch (err) {
       fail(err);
     }
@@ -1367,21 +1389,20 @@ document.addEventListener("submit", (e) => {
         }
         case "public-apply": {
           if (!applyTicket || Date.now() >= applyTicketExpires) throw Error("สิทธิ์เปิดฟอร์มหมดอายุ กรุณาคัดลอกข้อมูลที่กรอกไว้ แล้วเปิดฟอร์มด้วย PIN ใหม่");
-          const payload = {...applicantPayload(form), access_token: applyTicket};
-          delete payload.data.consent;
-          const { data, error } = await db.rpc("recruitment_apply", {
-            p_payload: payload,
-          });
-          if (error) throw error;
-          root.innerHTML = `<main class="login card"><h1>ได้รับใบสมัครแล้ว</h1><p>HR จะติดต่อกลับตามเบอร์ที่ระบุ</p><small>เลขอ้างอิง ${esc(data.id)}</small></main>`;
-          break;
+          const items=await selectedUploads(form);
+          const payload={...applicantPayload(form),access_token:applyTicket};delete payload.data.consent;
+          const {data,error}=await db.rpc(items.length?'recruitment_apply_with_documents':'recruitment_apply',{p_payload:{...payload,...(items.length?{document_count:items.length}:{})}});
+          if(error)throw error;
+          applyTicket='';applyTicketExpires=0;
+          publicReceipt={id:data.id,code:data.reference_code||data.id,token:data.upload_token||'',items,busy:false};
+          await continuePublicUploads();break;
         }
         case "new-applicant": {
-          await rpc("create_applicant", applicantPayload(form));
-          modal.close();
-          toast("เพิ่มผู้สมัครแล้ว");
-          await render();
-          break;
+          const items=await selectedUploads(form);
+          const created=await rpc("create_applicant",applicantPayload(form));
+          if(items.length)uploadJobs.set(created.id,items);
+          modal.close();await openApplicant(created.id,items.length?'documents':'general');
+          toast('เพิ่มผู้สมัครแล้ว');if(items.length)await runStaffUpload(created.id);break;
         }
         case "edit-applicant":
           await runAction("edit_applicant", applicantPayload(form));
@@ -1502,47 +1523,13 @@ document.addEventListener("submit", (e) => {
           else await render();
           break;
         case "upload": {
-          if (!attachmentsEnabled) throw Error("พักการแนบเอกสารไว้เฟสถัดไป");
-          if (!detail) break;
-          const file = (form.elements.namedItem("file") as HTMLInputElement)
-            .files?.[0];
-          if (!file) throw Error("เลือกไฟล์");
-          if (
-            file.size > 5 * 1024 * 1024 ||
-            !["application/pdf", "image/jpeg", "image/png"].includes(file.type)
-          )
-            throw Error("รองรับ PDF / JPG / PNG ไม่เกิน 5 MB");
-          const extension =
-            file.type === "application/pdf"
-              ? "pdf"
-              : file.type === "image/png"
-                ? "png"
-                : "jpg";
-          const path =
-            profile.id +
-            "/" +
-            detail.applicant.id +
-            "/" +
-            crypto.randomUUID() +
-            "." +
-            extension;
-          const { error } = await db.storage
-            .from("recruitment-documents")
-            .upload(path, file, { upsert: false, contentType: file.type });
-          if (error) throw error;
-          try {
-            await runAction("document", {
-              path,
-              title: file.name.slice(0, 200),
-            });
-          } catch (error) {
-            throw Error(
-              "อัปโหลดไฟล์แล้ว แต่บันทึกแนบไม่สำเร็จ กรุณาเปิดรายการใหม่และลองอีกครั้ง: " +
-                (error instanceof Error ? error.message : error),
-            );
-          }
-          break;
+          if(!attachmentsEnabled||!detail)throw Error('ยังไม่เปิดใช้งานไฟล์แนบ');
+          const id=detail.applicant.id as string;
+          if(uploadJobs.get(id)?.some(x=>x.state!=='done'))throw Error('กรุณาลองส่งไฟล์รายการที่ค้างให้เสร็จก่อนแนบชุดใหม่');
+          const items=await selectedUploads(form);if(!items.length)throw Error('เลือกไฟล์อย่างน้อยหนึ่งรายการ');
+          uploadJobs.set(id,items);modal.close();await runStaffUpload(id);break;
         }
+
       }
     } catch (err) {
       formError(form, err);

@@ -10,4 +10,5 @@ export function configAddress(
   return new URL(base + (development ? "api/config" : "config.json"), origin)
     .href;
 }
-export const attachmentsEnabled = false;
+export let attachmentsEnabled = false;
+export function setAttachmentsEnabled(enabled:boolean){attachmentsEnabled=enabled;}

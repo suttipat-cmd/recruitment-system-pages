@@ -46,6 +46,7 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
   for (const file of ["20261020105230_application_pin.sql","20261020111221_required_application_fields.sql","20261020113344_hiring_workflow_v43.sql","20261020120123_four_roles_and_request_types.sql","20261020130620_applicant_list_workspace_v47.sql","20261025142241_workflow_visibility_v49.sql"]) await db.exec(await readFile(new URL("../supabase/migrations/"+file,import.meta.url),"utf8"));
   // Reapplying the read-only migration must be safe and preserve all authorization paths.
   await db.exec(await readFile(new URL("../supabase/migrations/20261025142241_workflow_visibility_v49.sql",import.meta.url),"utf8"));
+  await db.exec(await readFile(new URL("../supabase/migrations/20261025152924_google_drive_attachments_v410.sql",import.meta.url),"utf8"));
   for (const [key, id] of Object.entries(ids)) {
     await db.query("insert into auth.users values($1,$2)", [
       id,
@@ -433,6 +434,65 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
     await assert.rejects(()=>as('hr',"select rm_private.workflow_date('2026-10-25')"));
     assert.equal((await db.query<{d:string|null}>("select rm_private.workflow_date('2026-02-30') as d")).rows[0]!.d,null);
     await db.query("delete from rm_private.applicants where full_name like 'Flow49 %'");
+  });
+  await t.test('private Drive documents: public upload capability, live role scope, idempotency and reset protection',async()=>{
+    const bridgeKey='integration-test-only-key-'.repeat(5),hash='a'.repeat(64);
+    const call=async(user:keyof typeof ids|null,name:string,payload:any)=>((await as(user,`select public.${name}($1) data`,[typeof payload==='string'?payload:JSON.stringify(payload)])).rows[0] as any).data;
+    const authorize=(user:keyof typeof ids|null,d:any)=>call(user,'recruitment_drive_authorize',d);
+    const commit=(d:any)=>call(null,'recruitment_drive_commit',{bridge_key:bridgeKey,...d});
+    assert.equal(((await as(null,'select public.recruitment_drive_status() data')).rows[0] as any).data.enabled,false);
+    await db.query("update rm_private.drive_config set enabled=true,bridge_url='https://script.google.com/macros/s/test_bridge/exec',bridge_key_hash=rm_private.drive_hash($1)",[bridgeKey]);
+    await cmd('admin','settings',{public_apply:true});
+    const pin=((await as('hr','select public.recruitment_application_pin() data')).rows[0] as any).data.pin;
+    const ticket=((await as(null,'select public.recruitment_unlock_application($1) data',[pin])).rows[0] as any).data.token;
+    const payload={...app('Drive test public','0894100000'),access_token:ticket,document_count:2};
+    const submitted=await call(null,'recruitment_apply_with_documents',payload),i=submitted.id;
+    assert.ok(submitted.reference_code.startsWith('DRV-'));assert.ok(submitted.upload_token.length>=60);
+    const retry=await call(null,'recruitment_apply_with_documents',payload);assert.equal(retry.id,submitted.id);assert.equal(retry.upload_token,submitted.upload_token); // Lost response can be retried without another application.
+    await assert.rejects(()=>call(null,'recruitment_apply',payload)); // Original PIN ticket is still consumed once.
+    const id1='41000000-0000-4000-8000-000000000001',id2='41000000-0000-4000-8000-000000000002',id3='41000000-0000-4000-8000-000000000003';
+    const d={action:'upload',applicant_id:i,document_id:id1,filename:'ทดสอบ.png',mime_type:'image/png',byte_size:8,sha256:hash,upload_token:submitted.upload_token};
+    const reserved=await authorize(null,d);assert.equal(reserved.folder_code,submitted.reference_code);
+    assert.equal((await authorize(null,d)).id,id1); // Retry uses the same reservation, not another quota slot.
+    await assert.rejects(()=>authorize(null,{...d,document_id:id2,byte_size:10485761}));
+    await assert.rejects(()=>authorize(null,{...d,document_id:id2,mime_type:'image/svg+xml'}));
+    await assert.rejects(()=>authorize(null,{...d,document_id:id2,filename:'../other.png'}));
+    await assert.rejects(()=>authorize(null,{...d,action:'read'}));
+    await assert.rejects(()=>authorize(null,{...d,applicant_id:aId}));
+    await authorize(null,{...d,document_id:id2,filename:'other.png'});
+    await assert.rejects(()=>authorize(null,{...d,document_id:id3})); // Count across requests, not just UI selection.
+    await assert.rejects(()=>call(null,'recruitment_drive_commit',{document_id:id1,file_id:'drive_file_410_001',sha256:hash,bridge_key:'wrong-key'}));
+    await commit({document_id:id1,file_id:'drive_file_410_001',sha256:hash});
+    await commit({document_id:id1,file_id:'drive_file_410_001',sha256:hash});
+    await assert.rejects(()=>commit({document_id:id1,file_id:'drive_file_410_other',sha256:hash}));
+    assert.equal(Number((await db.query<{n:string}>('select count(*) n from rm_private.activities where applicant_id=$1 and action=$2',[i,'DRIVE_DOCUMENT_ADDED'])).rows[0]!.n),1);
+    const list=await call('hr','recruitment_drive_documents',i);assert.equal(list.length,2);assert.ok(!JSON.stringify(list).includes('drive_file_'));assert.ok(!JSON.stringify(list).includes('sha256'));assert.ok(!JSON.stringify(list).includes('grant_id'));
+    await assert.rejects(()=>call(null,'recruitment_drive_documents',i));
+    await assert.rejects(()=>call('other','recruitment_drive_documents',i));
+    await assert.rejects(()=>call('coach','recruitment_drive_documents',i)); // Still respects hired/started-only Coach scope.
+    await assert.rejects(()=>authorize('mgr',{...d,document_id:id3})); // Supervisor is view-only.
+    await db.query("update rm_private.applicants set status='HIRED',position='HELPER' where id=$1",[i]);
+    assert.equal((await cmd('hr','applicants',{search:'Drive test public'})).rows[0].applicant_code,submitted.reference_code);
+    assert.equal((await call('mgr','recruitment_drive_documents',i)).length,1); // Pending records visible only to HR/Admin.
+    assert.equal((await call('coach','recruitment_drive_documents',i)).length,1);
+    await authorize('coach',{action:'read',applicant_id:i,document_id:id1});
+    await assert.rejects(()=>authorize('coach',{action:'recover',applicant_id:i,document_id:id2}));
+    await db.query('update rm_private.profiles set active=false where id=$1',[ids.coach]);
+    await assert.rejects(()=>authorize('coach',{action:'read',applicant_id:i,document_id:id1}));
+    await db.query('update rm_private.profiles set active=true where id=$1',[ids.coach]);
+    await db.query("update rm_private.drive_upload_grants set expires_at=now()-interval '1 second' where applicant_id=$1",[i]);
+    await assert.rejects(()=>authorize(null,d));
+    await authorize('hr',{action:'recover',applicant_id:i,document_id:id2}); // HR can reconcile after applicant capability expired.
+    await commit({document_id:id2,file_id:'drive_file_410_002',sha256:hash});
+    const backup=await cmd('admin','backup');assert.equal(backup.drive_attachments.length,2);assert.ok(!JSON.stringify(backup).includes(bridgeKey));
+    const plan=await cmd('admin','reset_preview');assert.ok(plan.documents>=2);
+    await assert.rejects(()=>cmd('admin','reset_transactions',{confirmation:'RESET RECRUITMENT',fingerprint:plan.fingerprint}));
+    for(const user of [null,'hr','coach'] as const){await assert.rejects(()=>as(user,'select * from rm_private.drive_upload_grants'));await assert.rejects(()=>as(user,'select * from rm_private.drive_config'));await assert.rejects(()=>as(user,'select * from rm_private.drive_attachments'));}
+    await db.query('delete from rm_private.drive_attachments where applicant_id=$1',[i]);
+    await db.query('delete from rm_private.activities where applicant_id=$1',[i]);
+    await db.query('delete from rm_private.drive_upload_grants where applicant_id=$1',[i]);
+    await db.query('delete from rm_private.applicants where id=$1',[i]);
+    await db.query('update rm_private.drive_config set enabled=false');
   });
   await t.test(
     "live profile deactivation, self-demotion guard and public submission gating",

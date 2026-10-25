@@ -108,6 +108,7 @@ export interface Profile {
   version: number;
 }
 export interface Applicant {
+  document_code?: string;
   workflow_stage?: string;
   handover_missing?: string[];
   road_test_pending?: boolean;

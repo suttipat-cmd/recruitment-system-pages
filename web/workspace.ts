@@ -1,7 +1,7 @@
 import type {Applicant,Role} from './domain';
-export type DetailTab = 'general'|'interview'|'employment'|'road'|'training'|'history';
+export type DetailTab = 'general'|'documents'|'interview'|'employment'|'road'|'training'|'history';
 export const detailTabs: {id:DetailTab;label:string}[] = [
-  {id:'general',label:'ข้อมูลทั่วไป'}, {id:'interview',label:'สัมภาษณ์'},
+  {id:'general',label:'ข้อมูลทั่วไป'}, {id:'documents',label:'เอกสารแนบ'}, {id:'interview',label:'สัมภาษณ์'},
   {id:'employment',label:'ส่งมอบ / เริ่มงาน'}, {id:'road',label:'ทดลองขับ'},
   {id:'training',label:'การอบรม'}, {id:'history',label:'ประวัติ'},
 ];

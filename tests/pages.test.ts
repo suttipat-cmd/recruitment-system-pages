@@ -25,6 +25,6 @@ test("GitHub Pages links and auth redirects retain repository path", () => {
     "https://site.vercel.app/#apply",
   );
 });
-test("attachments remain deferred for this phase", () => {
+test("attachments stay disabled until the private bridge is configured", () => {
   assert.equal(attachmentsEnabled, false);
 });

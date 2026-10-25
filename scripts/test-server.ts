@@ -21,6 +21,7 @@ await db.exec(await readFile(new URL("../supabase/migrations/20261020113344_hiri
 await db.exec(await readFile(new URL("../supabase/migrations/20261020120123_four_roles_and_request_types.sql",import.meta.url),"utf8"));
 await db.exec(await readFile(new URL("../supabase/migrations/20261020130620_applicant_list_workspace_v47.sql",import.meta.url),"utf8"));
 await db.exec(await readFile(new URL("../supabase/migrations/20261025142241_workflow_visibility_v49.sql",import.meta.url),"utf8"));
+await db.exec(await readFile(new URL("../supabase/migrations/20261025152924_google_drive_attachments_v410.sql",import.meta.url),"utf8"));
 const users = [
   "admin",
   "hr",
@@ -73,6 +74,18 @@ for (const [index,status] of ["INTERVIEW","HIRED","HIRED","STARTED"].entries()) 
 for(const [index,status] of ["HR_REVIEW","WAITING_INFO"].entries()) {
  await db.query(`insert into rm_private.applicants(full_name,phone,position,original_unit,hiring_unit,status,data)values($1,$2,'DRIVER','TL-ขอนแก่น','TL-ขอนแก่น',$3,$4)`,["ทดสอบ "+(index?"รอข้อมูล":"คัดกรอง"),"082222222"+index,status,JSON.stringify({birth_date:"1990-01-01",national_id:"123456789012"+(4+index),fuel_type:"รถน้ำมัน",vehicle_type:"10W",license_type:"ท.3",followup_date:"2026-10-20"})]);
 }
+const driveMedia=new Map<string,{base64:string;mime_type:string;byte_size:number;file_id:string}>();
+const mockBridgeKey='test-bridge-never-use-in-production-'.repeat(4);
+await db.query("update rm_private.drive_config set enabled=true,bridge_url='https://script.google.com/macros/s/local_test/exec',bridge_key_hash=rm_private.drive_hash($1)",[mockBridgeKey]);
+const mockAttachmentApp=(await db.query<{id:string;created_at:string}>("select id,created_at from rm_private.applicants where full_name='ทดสอบ อบรม'")).rows[0]!;
+for(const [index,fixture] of [{"name": "TEST-ONLY.png", "mime": "image/png", "data": "iVBORw0KGgoAAAANSUhEUgAAAZAAAADwCAIAAAChXqV1AAAE1ElEQVR4nO3YMc5aZxBAUZfeqfeQ3aZ26Q2kTRFF8MG8eReOdAqEhuExv3wL//j7z2+AhB/rTwDwIMECMgQLyBAsIEOwgAzBAjIEC8gQLCBDsIAMwQIyBAvIECwgQ7CADMECMgQLyBAsIEOwgAzBAjIEC8gQLCBDsIAMwQIyBAvIeFuwfv71C+A/CRaQIVhAhmABGbcO1rt2Al2CBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYF105ePX37Bn6+aPfPbZ73plz/TzfADBuujKx6+/Yc/WzR/57LPf9cqe6ef5AIJ10ZWPX3/Dnq2bP/LZZ7/rlT3Tz/MBBOuiKx+//oY9Wzd/5LPPftcre6af5wMI1vL1R+en92ztn77nuwInWG8nWMvXH52f3rO1f/qegnVbgrV8/dH56T1b+6fvKVi3JVjL1x+dn96ztX/6noJ1W4K1fP3R+ek9W/un73m3YG191w0J1vL1R+en92ztn76nYN2WYC1ff3R+es/W/ul7CtZtCdby9Ufnp/ds7Z++p2DdlmAtX/94/pHX79pT+U/fiWBNvL/1ez+AYC1f/3hesN57zyvf3/q9H0Cwlq9/PC9Y773nle9v/d4PIFjL1z+eF6z33vPK97d+7wcQrOXrj857zrP5V6J/5R0+9d/F//9kwdq8/ui85zybF6zbEqzl64/Oe86zecG6LcFavv7ovOc8mxes2xKs5euPznvOs3nBui3BWr7+6LznPJsXrNsSrOXrj857zrN5wbotwVq+/ui85zybF6zbEqzl6x/PP/t6Ys+7ftf0bZ/9LRPh+9Q7X0ywlq9/PC9Yr99q4u/ybXe+mGAtX/94XrBev9XE3+Xb7nwxwVq+/vG8YL1+q4m/y7fd+WKCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGYIFZAgWkCFYQIZgARmCBWQIFpAhWECGYAEZggVkCBaQIVhAhmABGZlgAfybYAEZggVkCBaQcbtgAUwTLCBDsIAMwQIyBAvIECwgQ7CADMECMgQLyBAsIEOwgAzBAjIEC8gQLCBDsIAMwQIyBAvIECwgQ7CADMECMgQLyBAsIEOwgAzBAjL+AeW09kbnotRLAAAAAElFTkSuQmCC"}, {"name": "TEST-ONLY.pdf", "mime": "application/pdf", "data": "JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCAzMDAgMjAwXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA0IDAgUiA+PiA+PiAvQ29udGVudHMgNSAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iago1IDAgb2JqCjw8IC9MZW5ndGggNTYgPj4Kc3RyZWFtCkJUIC9GMSAxOCBUZiA1MCAxMDAgVGQgKFRFU1QgT05MWSAtIExPQ0FMIEZJWFRVUkUpIFRqIEVUCmVuZHN0cmVhbQplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAowMDAwMDAwMjQxIDAwMDAwIG4gCjAwMDAwMDAzMTEgMDAwMDAgbiAKdHJhaWxlcgo8PCAvU2l6ZSA2IC9Sb290IDEgMCBSID4+CnN0YXJ0eHJlZgo0MTcKJSVFT0Y="}].entries()){
+ const bytes=Buffer.from(fixture.data,'base64'),id='41000000-0000-4000-8000-'+String(index+1).padStart(12,'0');
+ const code='DRV-'+new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(mockAttachmentApp.created_at)).replaceAll('-','')+'-'+mockAttachmentApp.id.replaceAll('-','').slice(0,8).toUpperCase();
+ await db.query("update rm_private.applicants set document_code=$1 where id=$2",[code,mockAttachmentApp.id]);
+ await db.query("insert into rm_private.drive_attachments(id,applicant_id,folder_code,filename,mime_type,byte_size,sha256,drive_file_id,state,created_by,authorized_by,authorized_until)values($1,$2,$3,$4,$5,$6,rm_private.drive_hash('mock'),$7,'READY',$8,$8,now()+interval '1 hour')",[id,mockAttachmentApp.id,code,fixture.name,fixture.mime,bytes.length,'mock_drive_'+id.replaceAll('-',''),users[1]!.id]);
+ driveMedia.set(id,{base64:fixture.data,mime_type:fixture.mime,byte_size:bytes.length,file_id:'mock_drive_'+id.replaceAll('-','')});
+}
+
 let serial = Promise.resolve();
 const server = await createServer({
   configFile: false,
@@ -103,15 +116,32 @@ const server = await createServer({
             }
             let body = "";
             for await (const part of req) body += part;
-            const d = body ? JSON.parse(body) : {};
+            const d = body ? req.url==='/mock/drive'?JSON.parse(new URLSearchParams(body).get('payload')||'{}'):JSON.parse(body) : {};
             const bearer =
-              req.headers.authorization?.replace("Bearer ", "") || "";
+              req.headers.authorization?.replace("Bearer ", "") || d.access_token || "";
             let uid = "";
             try {
               uid = JSON.parse(
                 Buffer.from(bearer.split(".")[1] || "", "base64url").toString(),
               ).sub;
             } catch {}
+            if(req.url==='/mock/drive'){
+              let result:any;
+              await db.exec('reset role');await db.query("select set_config('request.jwt.claim.sub',$1,false)",[uid]);await db.exec('set role '+(uid?'authenticated':'anon'));
+              try{
+                const f=(await db.query<any>('select public.recruitment_drive_authorize($1) data',[JSON.stringify(d)])).rows[0]!.data;
+                if(d.action==='read'){
+                  const media=driveMedia.get(f.id);if(!media)throw Error('Mock file missing');result={ok:true,data:{id:f.id,filename:f.filename,mime_type:f.mime_type,base64:media.base64}};
+                }else{
+                  if(d.action==='upload'&&!driveMedia.has(f.id))driveMedia.set(f.id,{base64:d.base64,mime_type:d.mime_type,byte_size:d.byte_size,file_id:'mock_drive_'+f.id.replaceAll('-','')});
+                  const media=driveMedia.get(f.id);if(!media)throw Error('Mock file missing');
+                  await db.exec('reset role');await db.query("select set_config('request.jwt.claim.sub','',false)");await db.exec('set role anon');
+                  await db.query('select public.recruitment_drive_commit($1)',[JSON.stringify({bridge_key:mockBridgeKey,document_id:f.id,file_id:media.file_id,sha256:f.sha256})]);result={ok:true,data:{id:f.id,state:'READY'}};
+                }
+              }catch(e){result={ok:false,message:(e as Error).message};}finally{await db.exec('reset role');}
+              const envelope=JSON.stringify({kind:'recruitment-drive-v1',request_id:d.request_id,nonce:d.nonce,...result}).replaceAll('<','\\u003c');
+              res.setHeader('Content-Type','text/html; charset=utf-8');res.end('<script>var m='+envelope+';var w=window;for(var i=0;i<8;i++){var p=w.parent;if(p===w)break;p.postMessage(m,"http://127.0.0.1:3100");w=p;}</script>');return;
+            }
             if (req.url?.startsWith("/mock/auth/v1/token")) {
               const u = users.find((x) => x.email === d.email);
               if (!u || d.password !== "test-password-123") {
@@ -188,8 +218,10 @@ const server = await createServer({
               );
               await db.exec("set role " + (uid ? "authenticated" : "anon"));
               try {
+                const driveQueries:Record<string,[string,unknown[]]>={recruitment_drive_status:['select public.recruitment_drive_status() data',[]],recruitment_drive_documents:['select public.recruitment_drive_documents($1) data',[d.p_applicant_id]],recruitment_apply_with_documents:['select public.recruitment_apply_with_documents($1) data',[JSON.stringify(d.p_payload)]]};
+                const driveQuery=driveQueries[name||''];
                 const gateQuery = name === "recruitment_application_pin" ? "select public.recruitment_application_pin() data" : name === "recruitment_unlock_application" ? "select public.recruitment_unlock_application($1) data" : "";
-                const query = gateQuery || (name === "recruitment_command"
+                const query = driveQuery?.[0] || gateQuery || (name === "recruitment_command"
                     ? "select public.recruitment_command($1,$2) data"
                     : name === "recruitment_apply"
                       ? "select public.recruitment_apply($1) data"
@@ -202,8 +234,10 @@ const server = await createServer({
                     : name === "recruitment_apply"
                       ? [JSON.stringify(d.p_payload)]
                       : [];
-                const r = await db.query(query, params);
-                res.end(JSON.stringify((r.rows[0] as any).data));
+                const r = await db.query(query, driveQuery?.[1] || params);
+                const value=(r.rows[0] as any).data;
+                if(name==='recruitment_drive_status'&&value.enabled)value.url='http://127.0.0.1:3100/mock/drive';
+                res.end(JSON.stringify(value));
               } catch (error) {
                 res.statusCode = 400;
                 res.end(
