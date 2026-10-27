@@ -1,0 +1,10 @@
+export const correctionSections = [
+ {id:'contact',title:'ข้อมูลติดต่อ',fields:['phone','line_id']},
+ {id:'identity',title:'ข้อมูลส่วนบุคคล / บัตรประชาชน',fields:['prefix','full_name','gender','birth_date','national_id','id_issued_at','id_expires_at']},
+ {id:'driving',title:'ความถนัด / ใบขับขี่ / ประสบการณ์',fields:['vehicle_type','license_type','fuel_type','driver_license_no','license_issued_at','license_expires_at','cargo_types','construction_brands','beverage_brands','other_cargo_note']},
+ {id:'availability',title:'ความพร้อมเริ่มงาน',fields:['current_job_status','available_start_date','availability_note']},
+ {id:'position',title:'แก้ตำแหน่งที่สมัคร',fields:['position','vehicle_type','license_type','driver_license_no']},
+];
+export const correctionLabels:Record<string,string>={phone:'เบอร์โทร',line_id:'LINE ID',prefix:'คำนำหน้า',full_name:'ชื่อ–สกุล',gender:'เพศ',birth_date:'วันเกิด',national_id:'เลขบัตรประชาชน',id_issued_at:'วันออกบัตรประชาชน',id_expires_at:'วันหมดอายุบัตรประชาชน',vehicle_type:'ประเภทรถ',license_type:'ประเภทใบขับขี่',fuel_type:'ประเภทเชื้อเพลิง',driver_license_no:'เลขใบขับขี่',license_issued_at:'วันออกใบขับขี่',license_expires_at:'วันหมดอายุใบขับขี่',cargo_types:'สินค้าที่เคยขน',construction_brands:'วัสดุก่อสร้าง / ยี่ห้อ',beverage_brands:'เครื่องดื่ม / ยี่ห้อ',other_cargo_note:'งานขนส่งอื่น',current_job_status:'สถานะการทำงานที่แจ้งตอนสมัคร',available_start_date:'วันที่พร้อมเริ่มงาน',availability_note:'หมายเหตุความพร้อม',position:'ตำแหน่ง',unit:'หน่วยงานที่รับจริง'};
+export function correctionValue(key:string,value:unknown):string {const v=String(value??'');if(!v)return '—';if(key==='position')return v==='DRIVER'?'พนักงานขับรถ':'เด็กติดรถ';if(/^\d{4}-\d{2}-\d{2}$/.test(v))return v.slice(8,10)+'/'+v.slice(5,7)+'/'+v.slice(0,4);return v;}
+export function correctionAudit(note:string):null|{reason:string;changes:{field:string;before:string;after:string}[];age_review:boolean}{try{const n=JSON.parse(note);return n.kind==='correction_v411'&&Array.isArray(n.changes)?n:null;}catch{return null;}}

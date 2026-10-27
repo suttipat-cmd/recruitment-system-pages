@@ -1,3 +1,4 @@
+import {correctionSections,correctionLabels,correctionValue,correctionAudit} from "./corrections";
 import {cancelDriveRequests,formatFileSize,initDrive,prepareUploads,uploadBatch,listDocuments,readDocument,recoverDocument,type UploadItem,type DriveDocument} from "./drive";
 import {workflowSummary,workflowLabels} from "./workflow";
 import {detailTabs,queueDefinitions,progressState,nextTask,type DetailTab} from "./workspace";
@@ -317,7 +318,7 @@ function shell(body: string) {
     ...(is("ADMIN") ? [["admin", "ตั้งค่าระบบ"]] : []),
   ];
   const navButton = (key:string,label:string) => `<button type="button" data-nav="${key}" title="${label}" aria-label="${label}" ${screen === key ? 'aria-current="page"' : ''} class="${screen === key ? "active" : ""}"><span class="nav-icon" aria-hidden="true">${navIcons[key]}</span><span class="nav-label">${label}</span></button>`;
-  root.innerHTML = `<div class="shell" data-role="${profile.role}"><aside class="sidebar" aria-label="เมนูหลัก"><div class="brand"><span class="brand-mark">${navIcons.applicants}</span><span class="nav-label">Recruitment<small>MANAGEMENT · V4.10</small></span></div><button class="mobile-menu" type="button" data-action="toggle-menu" aria-expanded="false" aria-label="เปิดหรือปิดเมนู">☰ เมนู</button><nav>${nav.map(([key,label]) => navButton(key!,label!)).join("")}</nav><div class="bottom"><button type="button" data-action="apply" title="แบบฟอร์มสมัครงาน" aria-label="แบบฟอร์มสมัครงาน"><span class="nav-icon" aria-hidden="true">↗</span><span class="nav-label">แบบฟอร์มสมัครงาน</span></button><div class="profile"><span class="avatar" aria-hidden="true">${esc(profile.display_name.slice(0,1))}</span><span class="nav-label">${esc(profile.display_name)}<small>${roles[profile.role]}</small></span></div><button type="button" data-action="logout" title="ออกจากระบบ" aria-label="ออกจากระบบ"><span class="nav-icon" aria-hidden="true">⇥</span><span class="nav-label">ออกจากระบบ</span></button></div></aside><main class="content"><div class="workspace-context"><span>${roles[profile.role]} Workspace</span><span>${esc(is("MANAGER") ? profile.all_units ? "ทุกหน่วยงาน · สิทธิ์พิเศษ" : profile.units.join(" · ") : "Recruitment System")}</span></div>${body}</main></div>`;
+  root.innerHTML = `<div class="shell" data-role="${profile.role}"><aside class="sidebar" aria-label="เมนูหลัก"><div class="brand"><span class="brand-mark">${navIcons.applicants}</span><span class="nav-label">Recruitment<small>MANAGEMENT · V4.11</small></span></div><button class="mobile-menu" type="button" data-action="toggle-menu" aria-expanded="false" aria-label="เปิดหรือปิดเมนู">☰ เมนู</button><nav>${nav.map(([key,label]) => navButton(key!,label!)).join("")}</nav><div class="bottom"><button type="button" data-action="apply" title="แบบฟอร์มสมัครงาน" aria-label="แบบฟอร์มสมัครงาน"><span class="nav-icon" aria-hidden="true">↗</span><span class="nav-label">แบบฟอร์มสมัครงาน</span></button><div class="profile"><span class="avatar" aria-hidden="true">${esc(profile.display_name.slice(0,1))}</span><span class="nav-label">${esc(profile.display_name)}<small>${roles[profile.role]}</small></span></div><button type="button" data-action="logout" title="ออกจากระบบ" aria-label="ออกจากระบบ"><span class="nav-icon" aria-hidden="true">⇥</span><span class="nav-label">ออกจากระบบ</span></button></div></aside><main class="content"><div class="workspace-context"><span>${roles[profile.role]} Workspace</span><span>${esc(is("MANAGER") ? profile.all_units ? "ทุกหน่วยงาน · สิทธิ์พิเศษ" : profile.units.join(" · ") : "Recruitment System")}</span></div>${body}</main></div>`;
   compactForms();
   numberTableRows(root);
 }
@@ -565,7 +566,7 @@ async function openApplicant(id: string, requestedTab?: DetailTab) {
   const current = evals.find((e) => e.round === a.round);
   const canHandover = (manage || ownManager) && hired;
   const actions = [
-    manage ? button("แก้ข้อมูล / หน่วยงาน", "edit-applicant") : "",
+    manage ? button("แก้ไขข้อมูลใบสมัคร", "edit-applicant")+button("เปลี่ยนหน่วยงาน", "change-unit") : "",
     manage ? button("บันทึกติดต่อ", "contact") : "",
     manage &&
     !["STARTED", "RESERVE", "WITHDRAWN", "CANCELLED", "NO_SHOW"].includes(
@@ -689,7 +690,7 @@ async function openApplicant(id: string, requestedTab?: DetailTab) {
         : `<p class="muted">${is("HR","MANAGER") ? "ยังไม่มีหัวข้อประเภทใหม่ที่ตรงกับพนักงานนี้ กรุณาเพิ่มหัวข้ออบรม" : "บันทึกอบรมได้เฉพาะ HR และ Supervisor ในหน่วยงาน"}</p>`
     }${is("HR","MANAGER") ? button("+ เพิ่มหัวข้ออบรม", "new-topic") : ""}<div class="table-wrap"><table><thead><tr><th>หัวข้อ</th><th>วันที่</th><th>ผล</th><th></th></tr></thead><tbody>${d.training.map((tr: Row) => `<tr><td>${esc(tr.title)}<br><small>${categories[tr.category] || "ประเภทเดิม"} · ${esc(tr.note)}</small></td><td>${date(tr.training_date)}</td><td>${tr.result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</td><td>${Object.hasOwn(categories,tr.category) && canTrain(profile.role, profile.units, a, profile.id, tr.category, !!profile.all_units) ? `<button data-training="${tr.id}">แก้ไข</button>` : ""}</td></tr>`).join("")}</tbody></table></div></section>`;
   }
-  body += `<section class="card" data-detail-group="history"><h2>ประวัติการดำเนินการ</h2>${d.activities.map((e: Row) => `<div class="timeline"><small>${date(e.created_at)} · ${esc(e.display_name || "ผู้สมัคร")}</small><p><b>${esc(actionLabel(e.action))}</b></p><p>${esc(e.note)}</p></div>`).join("")}</section></div><div>${personalSummary(a)}${hired ? `<section class="card" data-detail-group="employment"><h2>ข้อมูลดูแลพนักงาน</h2><div class="keyvals"><div><small>Coach</small>${esc(person(a.coach_id))}</div><div><small>Supervisor</small>${esc(person(a.supervisor_id))}</div><div><small>ทะเบียน / รถ</small>${esc(a.data.plate || "—")} / ${fleet(a.data.fleet_type)}</div><div><small>เริ่มงานจริง</small>${date(a.actual_start_date)}</div><div><small>สถานะงาน</small>${a.employment_status === "RESIGNED" ? "ลาออก" : a.employment_status === "ACTIVE" ? "ทำงานอยู่" : "รอเริ่มงาน"}</div><div><small>ลาออก</small>${date(a.resignation_date)}</div></div></section>` : ""}${evals.length ? `<section class="card" data-detail-group="history"><h2>ประวัติสัมภาษณ์</h2>${evals.map((e) => `<div class="slot"><b>รอบ ${e.round + 1} · ${e.stage === "DRAFT" ? "แบบร่าง" : e.result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</b><p>คะแนน ${e.score || "—"}</p><p>ประเภทเชื้อเพลิง ${esc(e.fuel || "—")}</p><p>${esc(e.note)}</p><small>${esc(person(e.evaluator_id))} · ${date(e.updated_at)}</small></div>`).join("")}</section>` : ""}${attachmentsEnabled ? `<section class="card" data-detail-group="documents"><h2>เอกสารแนบ</h2><p class="muted">รูปภาพแสดงอัตโนมัติ · JPG, PNG และ PDF ไม่เกิน 10 MB/ไฟล์</p>${is('ADMIN','HR')?`<form id="upload">${attachmentFields()}<button type="submit" class="primary">แนบไฟล์เพิ่ม</button><p class="error" data-error></p></form>`:''}<div data-upload-job="${a.id}"></div><div data-drive-panel="${a.id}" aria-live="polite">กำลังโหลดเอกสาร…</div></section>`:''}</div></div>`;
+  body += `<section class="card" data-detail-group="history"><h2>ประวัติการดำเนินการ</h2>${d.activities.map((e: Row) => `<div class="timeline"><small>${date(e.created_at)} · ${esc(e.display_name || "ผู้สมัคร")}</small><p><b>${esc(actionLabel(e.action))}</b></p><div>${correctionHistory(e.note)}</div></div>`).join("")}</section></div><div>${personalSummary(a)}${hired ? `<section class="card" data-detail-group="employment"><h2>ข้อมูลดูแลพนักงาน</h2><div class="keyvals"><div><small>Coach</small>${esc(person(a.coach_id))}</div><div><small>Supervisor</small>${esc(person(a.supervisor_id))}</div><div><small>ทะเบียน / รถ</small>${esc(a.data.plate || "—")} / ${fleet(a.data.fleet_type)}</div><div><small>เริ่มงานจริง</small>${date(a.actual_start_date)}</div><div><small>สถานะงาน</small>${a.employment_status === "RESIGNED" ? "ลาออก" : a.employment_status === "ACTIVE" ? "ทำงานอยู่" : "รอเริ่มงาน"}</div><div><small>ลาออก</small>${date(a.resignation_date)}</div></div></section>` : ""}${evals.length ? `<section class="card" data-detail-group="history"><h2>ประวัติสัมภาษณ์</h2>${evals.map((e) => `<div class="slot"><b>รอบ ${e.round + 1} · ${e.stage === "DRAFT" ? "แบบร่าง" : e.result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</b><p>คะแนน ${e.score || "—"}</p><p>ประเภทเชื้อเพลิง ${esc(e.fuel || "—")}</p><p>${esc(e.note)}</p><small>${esc(person(e.evaluator_id))} · ${date(e.updated_at)}</small></div>`).join("")}</section>` : ""}${attachmentsEnabled ? `<section class="card" data-detail-group="documents"><h2>เอกสารแนบ</h2><p class="muted">รูปภาพแสดงอัตโนมัติ · JPG, PNG และ PDF ไม่เกิน 10 MB/ไฟล์</p>${is('ADMIN','HR')?`<form id="upload">${attachmentFields()}<button type="submit" class="primary">แนบไฟล์เพิ่ม</button><p class="error" data-error></p></form>`:''}<div data-upload-job="${a.id}"></div><div data-drive-panel="${a.id}" aria-live="polite">กำลังโหลดเอกสาร…</div></section>`:''}</div></div>`;
   shell(body);
   organizeApplicant(a, handoverComplete);
   if(attachmentsEnabled){renderUploadJob(a.id);void refreshDocuments(a.id);}
@@ -757,7 +758,7 @@ function actionLabel(a: string) {
         RELEASE_INTERVIEW: "คืนคิวสัมภาษณ์",
         INTERVIEW: "บันทึกผลสัมภาษณ์",
         MATCH: "เปลี่ยนการผูกคำขอ",
-        EDIT_APPLICANT: "แก้ไขข้อมูล / หน่วยงาน",
+        EDIT_APPLICANT: "แก้ไขข้อมูล / หน่วยงาน",CORRECT_APPLICANT:"แก้ไขข้อมูลใบสมัคร",CHANGE_UNIT:"เปลี่ยนหน่วยงานที่รับจริง",
         RESERVE: "เก็บเป็นผู้สมัครสำรอง",
         RECALL: "เรียกผู้สมัครกลับ",
         HANDOVER: "ส่งมอบผู้ดูแล",
@@ -919,6 +920,10 @@ function topicModal() {
     "topic",
   );
 }
+let pendingCorrection:{mode:string;payload:Row}|null=null;
+function correctionChanges(changes:Row[]):string{return `<div class="table-wrap"><table data-numbered="true"><thead><tr><th>ลำดับ</th><th>ข้อมูล</th><th>ก่อนแก้</th><th>หลังแก้</th></tr></thead><tbody>${changes.map((c,i)=>`<tr><td>${i+1}</td><td>${esc(correctionLabels[c.field]||c.field)}</td><td>${esc(correctionValue(c.field,c.before))}</td><td>${esc(correctionValue(c.field,c.after))}</td></tr>`).join('')}</tbody></table></div>`;}
+function correctionHistory(value:string):string{const audit=correctionAudit(value);return audit?`${esc(audit.reason||'แก้ข้อมูลทั่วไป')}${audit.age_review?'<br>ทบทวนเกณฑ์อายุแล้ว':''}${correctionChanges(audit.changes)}`:esc(value);}
+function correctionPositionRequirements(){const form=modal.querySelector<HTMLFormElement>('#correction-fields');const pos=form?.elements.namedItem('position') as HTMLSelectElement|null;if(!form||!pos)return;for(const name of ['vehicle_type','license_type','driver_license_no']){const input=form.elements.namedItem(name) as HTMLInputElement;input.required=pos.value==='DRIVER';const label=input.closest('label')!;label.querySelector('.req')?.remove();if(input.required)input.insertAdjacentHTML('beforebegin','<span class="req">*</span>');}}
 async function runAction(act: string, d: Row = {}) {
   if (!detail) throw Error("เปิดผู้สมัครก่อน");
   await rpc(act, {
@@ -1051,13 +1056,21 @@ async function clickAction(action: string) {
   if (!detail) return;
   const a = detail.applicant as Applicant;
   if (action === "edit-applicant") {
-    openModal(
-      "แก้ข้อมูลผู้สมัคร",
-      `<div class="notice">หน่วยงานสมัครเดิม ${esc(a.original_unit)} จะคงอยู่ หากเปลี่ยนหน่วยงานรับจริง ระบบปลดคำขอและผู้สัมภาษณ์เดิมอัตโนมัติ</div>${profileFields(a)}`,
-      "edit-applicant",
-    );
-    applyDriverRequirements();
-    return;
+    openModal('แก้ไขข้อมูลใบสมัคร',`<p class="muted">เลือกหมวดที่ต้องการแก้ ข้อมูลในหมวดอื่นและผลการดำเนินการจะคงเดิม</p><div class="correction-menu">${correctionSections.filter(x=>x.id!=='position'||(['HR_REVIEW','WAITING_INFO'].includes(a.status)&&!a.owner_id&&!a.slot_id)).map(x=>button(x.title,'correction-'+x.id)).join('')}</div>`);return;
+  }
+  if(action.startsWith('correction-')){
+    const section=correctionSections.find(x=>x.id===action.slice(11));if(!section)return;
+    const template=document.createElement('template');template.innerHTML=profileFields(a);
+    const labels=Array.from(template.content.querySelectorAll<HTMLLabelElement>('label')).filter(label=>section.fields.includes(label.querySelector<HTMLInputElement|HTMLSelectElement>('input,select,textarea')?.name||''));
+    openModal(section.title,`<p class="hint">แก้เฉพาะข้อมูลที่ตรวจสอบแล้ว ขั้นตอนถัดไปจะแสดงค่าก่อนและหลังให้ตรวจอีกครั้ง</p><div class="fields">${labels.map(l=>l.outerHTML).join('')}</div>`,'correction-fields');
+    modal.querySelector<HTMLFormElement>('#correction-fields')!.dataset.mode='correct_applicant';
+    for(const name of ['id_issued_at','id_expires_at','current_job_status','available_start_date','cargo_types','other_cargo_note']){const input=modal.querySelector<HTMLInputElement>(`[name="${name}"]`);if(input?.value){input.required=true;if(!input.closest('label')?.querySelector('.req'))input.insertAdjacentHTML('beforebegin','<span class="req">*</span>');}}
+    const submit=modal.querySelector<HTMLButtonElement>('button[type=submit]');if(submit)submit.textContent='ตรวจสอบการเปลี่ยนแปลง →';
+    if(section.id==='position')correctionPositionRequirements();return;
+  }
+  if(action==='change-unit'){
+    openModal('เปลี่ยนหน่วยงานที่รับจริง',`<p>หน่วยงานเดิมที่สมัคร: <b>${esc(a.original_unit)}</b> · รับจริงปัจจุบัน: <b>${esc(a.hiring_unit)}</b></p><div class="notice warn">ระบบจะปลดคำขอรถ ผู้สัมภาษณ์ ผู้ดูแล Coach และทะเบียนรถเดิม หากกำลังสัมภาษณ์จะกลับให้ HR คัดกรองใหม่ ประวัติผลที่บันทึกแล้ว วันเริ่มงาน และโฟลเดอร์เอกสารยังคงอยู่</div><div class="fields">${select('unit','หน่วยงานใหม่',unitOpts(a.hiring_unit),true)}${note('',true,'เหตุผลเปลี่ยนหน่วยงาน')}</div>`,'correction-fields');
+    modal.querySelector<HTMLFormElement>('#correction-fields')!.dataset.mode='change_unit';return;
   }
   if (action === "claim" || action === "release-interview") {
     await runAction(action === "claim" ? "claim" : "release_interview");
@@ -1185,7 +1198,7 @@ document.addEventListener("change", (e) => {
   const el = e.target as HTMLInputElement;
   if(el.name==='attachments'){void previewSelection(el);return;}
   if(el.hasAttribute("data-list-size")){filters.size=Number(el.value);filters.offset=0;void render();return;}
-  if (el.name === "position") applyDriverRequirements();
+  if (el.name === "position") {applyDriverRequirements();correctionPositionRequirements();}
   if (el.closest("#screen")) dynamicRequirements();
   if (el.closest("#employment")) {
     const form = el.closest("form")!;
@@ -1404,9 +1417,18 @@ document.addEventListener("submit", (e) => {
           modal.close();await openApplicant(created.id,items.length?'documents':'general');
           toast('เพิ่มผู้สมัครแล้ว');if(items.length)await runStaffUpload(created.id);break;
         }
-        case "edit-applicant":
-          await runAction("edit_applicant", applicantPayload(form));
-          break;
+        case "correction-fields": {
+          const a=detail!.applicant as Applicant;const {full_name,phone,position,unit,note:reason,...values}=dataOf(form);
+          const payload:Row={id:a.id,version:a.version,data:values};for(const [k,v] of Object.entries({full_name,phone,position,unit,note:reason}))if(v!==undefined)payload[k]=v;
+          const mode=form.dataset.mode!;const plan=await rpc(mode,{...payload,preview:true});
+          pendingCorrection={mode,payload};
+          openModal('ตรวจสอบก่อนบันทึก',`<p>ผู้สมัคร: <b>${esc(a.full_name)}</b></p>${correctionChanges(plan.changes)}${plan.age_review?'<div class="notice warn">วันเกิดเปลี่ยนหลังผ่านคัดกรองแล้ว โปรดทบทวนเกณฑ์อายุ ผลเดิมจะไม่เปลี่ยนอัตโนมัติ</div>':''}${plan.duplicates?.length?`<div class="notice warn">พบข้อมูลซ้ำ ${plan.duplicates.length} รายการ: ${plan.duplicates.map((x:Row)=>esc(x.name)+' ('+esc(statuses[x.status]||x.status)+')').join(', ')} โปรดตรวจว่าไม่ใช่การใช้ใบสมัครผิดคน</div>`:''}<div class="fields">${note(String(reason||''),plan.needs_reason,'เหตุผล / สิ่งที่ตรวจสอบแล้ว')}</div>${plan.duplicates?.length?'<label class="check"><input type="checkbox" name="duplicate_ack" required> ตรวจรายการซ้ำแล้ว และยืนยันแก้ข้อมูลของผู้สมัครคนนี้ <span class="req">*</span></label>':''}${plan.age_review?'<label class="check"><input type="checkbox" name="age_review_ack" required> ทบทวนเกณฑ์อายุและผลคัดกรองที่เกี่ยวข้องแล้ว <span class="req">*</span></label>':''}${mode==='change_unit'?'<label class="check"><input type="checkbox" name="confirm_impact" required> ยืนยันปลดคำขอและผู้รับผิดชอบเดิมตามที่แจ้ง <span class="req">*</span></label>':''}`,'correction-confirm');break;
+        }
+        case "correction-confirm": {
+          if(!pendingCorrection)throw Error('เปิดรายการแก้ไขใหม่');const {mode,payload}=pendingCorrection;
+          await rpc(mode,{...payload,note:d.note||'',duplicate_ack:d.duplicate_ack==='on',age_review_ack:d.age_review_ack==='on',confirm_impact:d.confirm_impact==='on'});
+          pendingCorrection=null;modal.close();toast('แก้ไขข้อมูลและบันทึกประวัติแล้ว');await openApplicant(payload.id);break;
+        }
         case "filters":
           if(d.age_min!==""&&d.age_max!==""&&d.age_min!==undefined&&d.age_max!==undefined&&Number(d.age_min)>Number(d.age_max))throw Error("อายุตั้งแต่ต้องไม่มากกว่าอายุไม่เกิน");
           if(d.from&&d.to&&String(d.from)>String(d.to))throw Error("วันที่เริ่มต้นต้องไม่เกินวันที่สิ้นสุด");

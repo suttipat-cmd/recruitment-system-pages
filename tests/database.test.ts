@@ -47,6 +47,7 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
   // Reapplying the read-only migration must be safe and preserve all authorization paths.
   await db.exec(await readFile(new URL("../supabase/migrations/20261025142241_workflow_visibility_v49.sql",import.meta.url),"utf8"));
   await db.exec(await readFile(new URL("../supabase/migrations/20261025152924_google_drive_attachments_v410.sql",import.meta.url),"utf8"));
+  await db.exec(await readFile(new URL("../supabase/migrations/20261027025639_applicant_corrections_v411.sql",import.meta.url),"utf8"));
   for (const [key, id] of Object.entries(ids)) {
     await db.query("insert into auth.users values($1,$2)", [
       id,
@@ -116,6 +117,37 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
     const a = await get(id);
     return cmd(user, action, { id, version: a.version, ...data });
   }
+  await t.test('HR correction preflight is read-only, scoped, audited, masked and versioned',async()=>{
+    const {id}=await cmd('hr','create_applicant',app('แก้ไข ทดสอบ','0891111111'));const a=await get(id);
+    await db.query("update rm_private.applicants set data=data-'driver_license_no' where id=$1",[id]);
+    await mutate('hr','correct_applicant',id,{preview:true,data:{line_id:'legacy allowed'}});
+    await db.query("update rm_private.applicants set data=$2 where id=$1",[id,JSON.stringify(a.data)]);
+    for(const role of ['mgr','coach','other'] as const)await assert.rejects(()=>mutate(role,'correct_applicant',id,{data:{line_id:'x'}}));
+    await assert.rejects(()=>mutate('hr','correct_applicant',id,{unit:otherUnit,data:{line_id:'x'}}));
+    const preview=await mutate('hr','correct_applicant',id,{preview:true,data:{line_id:'new-line'}});assert.equal(preview.changes[0].field,'line_id');assert.equal((await get(id)).version,a.version);
+    await mutate('hr','correct_applicant',id,{data:{line_id:'new-line'}});let b=await get(id);assert.equal(b.data.line_id,'new-line');assert.equal(b.data.national_id,a.data.national_id);assert.equal(b.version,a.version+1);
+    await assert.rejects(()=>cmd('hr','correct_applicant',{id,version:a.version,data:{line_id:'stale'}}));
+    await assert.rejects(()=>mutate('hr','correct_applicant',id,{data:{national_id:'9999999999999'}}));
+    await mutate('hr','correct_applicant',id,{data:{national_id:'9999999999999'},note:'ตรวจบัตรแล้ว'});
+    let history=(await cmd('hr','detail',{id})).activities;let audit=JSON.parse(history.find((x:any)=>x.action==='CORRECT_APPLICANT').note);assert.equal(audit.changes[0].after,'••••9999');assert.ok(!JSON.stringify(history).includes('9999999999999'));
+    await assert.rejects(()=>mutate('hr','correct_applicant',id,{data:{id_issued_at:'2035-01-01'},note:'ผิด'}));
+    await assert.rejects(()=>mutate('hr','correct_applicant',id,{data:{current_job_status:''}}));
+    await assert.rejects(()=>mutate('hr','correct_applicant',id,{data:{employment_status:'RESIGNED'}}));
+    const peer=await cmd('hr','create_applicant',app('ซ้ำ ทดสอบ','0892222222'));
+    const plan=await mutate('hr','correct_applicant',id,{preview:true,phone:'0892222222'});assert.ok(plan.duplicates.some((x:any)=>x.id===peer.id));
+    await assert.rejects(()=>mutate('hr','correct_applicant',id,{phone:'0892222222'}));
+    await mutate('hr','correct_applicant',id,{phone:'0892222222',duplicate_ack:true});
+    await mutate('hr','correct_applicant',id,{position:'HELPER',note:'แก้ตำแหน่งก่อนคัดกรอง'});assert.equal((await get(id)).position,'HELPER');assert.ok((await get(id)).document_code.startsWith('DRV-'));
+    await mutate('hr','correct_applicant',id,{position:'DRIVER',note:'คืนตำแหน่ง'});
+    await db.query("update rm_private.applicants set status='HIRED',coach_id=$2 where id=$1",[id,ids.coach]);
+    await assert.rejects(()=>mutate('hr','correct_applicant',id,{position:'HELPER',note:'ไม่อนุญาต'}));
+    await assert.rejects(()=>mutate('hr','correct_applicant',id,{data:{birth_date:'1991-01-01'},note:'ตรวจบัตรแล้ว'}));
+    await mutate('hr','correct_applicant',id,{data:{birth_date:'1991-01-01'},note:'ตรวจบัตรและทบทวนเกณฑ์แล้ว',age_review_ack:true});
+    const coach=await cmd('coach','detail',{id});assert.ok(!JSON.stringify(coach.activities).includes('1991-01-01'));assert.equal((await get(id)).status,'HIRED');
+    await assert.rejects(()=>mutate('hr','change_unit',id,{unit:otherUnit,note:'ย้าย'}));
+    await mutate('hr','change_unit',id,{unit:otherUnit,note:'ยืนยันย้าย',confirm_impact:true});b=await get(id);assert.equal(b.hiring_unit,otherUnit);assert.equal(b.original_unit,unit);assert.equal(b.coach_id,null);
+    await db.query('delete from rm_private.activities where applicant_id=any($1::uuid[])',[[id,peer.id]]);await db.query('delete from rm_private.applicants where id=any($1::uuid[])',[[id,peer.id]]);
+  });
   let aId = "",
     req: any,
     slotId = "";
@@ -222,7 +254,8 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
     "unit change atomically releases slot, preserves original unit, increments version",
     async () => {
       const a = await get(aId);
-      await mutate("hr", "edit_applicant", aId, {
+      await mutate("hr", "change_unit", aId, {
+        confirm_impact:true,
         ...app(),
         unit: otherUnit,
         note: "เปลี่ยนหน่วยงาน",
@@ -240,7 +273,8 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
       await assert.rejects(() =>
         cmd("hr", "screen", { id: aId, version: a.version, result: "FORWARD" }),
       );
-      await mutate("hr", "edit_applicant", aId, {
+      await mutate("hr", "change_unit", aId, {
+        confirm_impact:true,
         ...app(),
         note: "กลับหน่วยงานเดิม",
       });

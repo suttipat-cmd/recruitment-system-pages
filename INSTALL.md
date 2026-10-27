@@ -1,3 +1,7 @@
+## V4.11.0
+
+ติดตั้ง `supabase/migrations/20261027025639_applicant_corrections_v411.sql` ใน transaction บน V4.10 ก่อนเผยแพร่เว็บ สคริปต์ตรวจ fingerprint เดิมและเพิ่ม helper ที่เรียกผ่าน command ของ HR/Admin เท่านั้น ไม่มีการล้างข้อมูล ไม่เปลี่ยนสิทธิ์ผู้ใช้ ไม่แก้ Apps Script และไม่ต้อง Deploy Drive Bridge ใหม่
+
 ## V4.10.0: Google Drive attachments
 
 รัน `supabase/migrations/20261025152924_google_drive_attachments_v410.sql` หนึ่งครั้งภายใน transaction ต่อจาก V4.9 สคริปต์ตรวจ fingerprint ฟังก์ชันเดิม เพิ่มตารางส่วนตัวพร้อม RLS และยังปิด Bridge เป็นค่าเริ่มต้น ไม่ต้องล้างข้อมูล
