@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isoDate, date, retention, canTrain, esc } from "../web/domain.js";
+import { isoDate, date, retention, canTrain, esc, displayApplicantName } from "../web/domain.js";
+test('applicant title is attached once with no extra space', () => {
+  assert.equal(displayApplicantName('สมชาย ใจดี','นาย'),'นายสมชาย ใจดี');
+  assert.equal(displayApplicantName('นาย สมชาย ใจดี','นาย'),'นายสมชาย ใจดี');
+  assert.equal(displayApplicantName('นายสมชาย ใจดี','นาย'),'นายสมชาย ใจดี');
+  assert.equal(displayApplicantName('สมชาย ใจดี',''),'สมชาย ใจดี');
+});
 test("dates display Gregorian dd/mm/yyyy and reject impossible dates", () => {
   assert.equal(date("2026-10-19T00:00:00Z"), "19/10/2026");
   assert.equal(isoDate("19/10/2026"), "2026-10-19");

@@ -22,8 +22,8 @@ export function mountApplicantGrid(root: HTMLElement) {
   const columns: ColDef<string[]>[] = headings.map((header, index) => ({
     headerName: header.textContent?.trim() || 'จัดการ',
     colId: String(index),
-    minWidth: index === 0 ? 72 : index === 1 ? 220 : index === 2 || index === 3 ? 220 : index === headings.length - 1 ? 130 : 150,
-    width: index === 0 ? 72 : index === 1 ? 240 : index === 2 || index === 3 ? 240 : index === headings.length - 1 ? 130 : 160,
+    minWidth: index === 0 ? 72 : index === 1 ? 145 : index === 2 ? 200 : index === 4 || index === 5 ? 210 : index === headings.length - 1 ? 130 : 140,
+    width: index === 0 ? 72 : index === 1 ? 150 : index === 2 ? 220 : index === 4 || index === 5 ? 230 : index === headings.length - 1 ? 130 : 150,
     pinned: index < 2 ? 'left' : index === headings.length - 1 ? 'right' : undefined,
     lockPinned: true,
     sortable: false,

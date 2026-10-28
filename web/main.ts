@@ -16,6 +16,7 @@ import {
   today,
   retention,
   ageOnDate,
+  displayApplicantName,
   canTrain,
   requiresAgeApproval,
   type Applicant,
@@ -279,7 +280,7 @@ function compactForms() {
     template.content.append(form.cloneNode(true));
     const action = document.createElement("button");
     action.type = "button"; action.className = "primary";
-    action.textContent = label; action.dataset.workflow = id; action.dataset.title = title;
+    action.textContent = form.dataset.workflowLabel || label; action.dataset.workflow = id; action.dataset.title = title;
     action.setAttribute("aria-haspopup","dialog");
     if (form.querySelector("fieldset:disabled")) {action.disabled=true;action.title="กรอกข้อมูลส่งมอบให้ครบก่อน";}
     form.replaceWith(action, template);
@@ -363,11 +364,15 @@ function workflowDate(a:Applicant) {
  return `<span class="${w.late?'text-danger':''}">${date(w.nextDate)}</span>${w.nextDate?`<small class="cell-secondary">${w.dateLabel}${w.late?' · เลยกำหนด':''}</small>`:''}`;
 }
 function applicantCode(a:Applicant) {
- if(a.document_code)return a.document_code;
+ if(a.reference_code)return a.reference_code;
  if(a.applicant_code)return a.applicant_code;
+ if(a.document_code)return a.document_code;
  const stamp=new Date(a.created_at);
  const day=Number.isNaN(stamp.getTime())?"":new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Bangkok",year:"numeric",month:"2-digit",day:"2-digit"}).format(stamp).replaceAll("-","");
  return `${a.position==='DRIVER'?'DRV':'AST'}-${day}-${a.id.replaceAll('-','').slice(0,8).toUpperCase()}`;
+}
+function displayName(a:Applicant) {
+ return displayApplicantName(a.full_name,a.prefix||a.data?.prefix);
 }
 function ageBadge(years:number|null|undefined, pos:string) {
  if(years===null||years===undefined)return '<span class="badge neutral">ยังไม่มีข้อมูลอายุ</span>';
@@ -386,8 +391,8 @@ async function applicantList() {
  return `<nav class="breadcrumb" aria-label="ตำแหน่งปัจจุบัน"><span>⌂</span><span>›</span><strong>${training?'พนักงาน / การอบรม':is('COACH')?'พนักงาน':'ผู้สมัครทั้งหมด'}</strong></nav>`+head(training?'พนักงาน / การอบรม':is('COACH')?'พนักงานและงานทดลองขับ':'ผู้สมัครทั้งหมด',training?'ค้นหาพนักงาน เปิดข้อมูล และบันทึกผลอบรมตามสิทธิ์':'ค้นหา คัดกรอง และติดตามกระบวนการรับสมัคร',button("แบบฟอร์ม", "apply")+(is('ADMIN','HR')&&!training?button('+ เพิ่มผู้สมัคร','new-applicant','primary'):''),training?'Employees':'Applicants')+
  `<details class="card filter-panel"><summary><span>☷ &nbsp;ค้นหาและตัวกรอง</span><span class="filter-status">${active?'มีตัวกรอง':''}⌄</span></summary><form id="filters"><div class="list-filter-grid">${field('search','ชื่อ เบอร์โทร หรือรหัสผู้สมัคร',filters.search)}${select('unit','หน่วยงาน',unitOpts(filters.unit).replace('เลือก…','ทุกหน่วยงาน'))}${!training?select('status','ผลการรับสมัคร',opts(Object.entries(statuses).filter(([v])=>!is('COACH')||['HIRED','STARTED'].includes(v)).map(([value,label])=>({value,label})),filters.status,'ทุกสถานะ')):''}${select('workflow_stage','ขั้นตอนปัจจุบัน',opts(Object.entries(workflowLabels).filter(([k])=>!is('COACH')||['HANDOVER_PENDING','START_DATE_PENDING','START_TODAY','START_OVERDUE','START_SCHEDULED','ACTIVE','RESIGNED'].includes(k)).map(([value,label])=>({value,label})),filters.workflow_stage,'ทุกขั้นตอน'))}${select('position','ตำแหน่ง',opts([{value:'DRIVER',label:'พนักงานขับรถ'},{value:'HELPER',label:'เด็กติดรถ'}],filters.position,'ทุกตำแหน่ง'))}${select('vehicle','ประเภทรถ',opts(['เทรเลอร์','4W','6W','10W'].map(x=>({value:x,label:x})),filters.vehicle,'ทุกประเภท'))}${!is('COACH')?field('age_min','อายุตั้งแต่ (ปี)',filters.age_min,false,'number','min="0" max="120"')+field('age_max','อายุไม่เกิน (ปี)',filters.age_max,false,'number','min="0" max="120"'):''}${dates('from','สมัครตั้งแต่วันที่',filters.from)}${dates('to','ถึงวันที่',filters.to)}</div><div class="filter-actions"><button class="primary" type="submit">ค้นหา</button>${button('ล้างตัวกรอง','clear-filters')}</div><p class="error" data-error></p></form></details>
  ${active?`<div class="notice queue-notice"><span>กำลังดู: ${esc(selectedFilters)}</span>${button('ล้างตัวกรอง','clear-filters')}</div>`:''}<section class="surface applicant-list-surface"><div class="list-table-heading"><h2>${training||is('COACH')?'รายชื่อพนักงาน':'รายการผู้สมัคร'}</h2><small>ทั้งหมด ${total} รายการ</small></div>
- <div class="applicant-mobile">${rows.map((a,i)=>`<article class="mobile-record"><small class="reference-code">ลำดับ ${filters.offset+i+1} · ${esc(applicantCode(a))}</small><div class="section-heading"><b>${esc(a.full_name)}</b>${workflowBadge(a)}</div><p>${position(a.position)} · ${esc(a.hiring_unit)}</p><div class="mobile-record-facts">${!is('COACH')?ageBadge(a.age_years,a.position):''}<span>${esc(a.vehicle_type||'—')}</span></div><div class="mobile-workflow"><p><b>รอ:</b> ${esc(workflowSummary(a,today(),person).waiting)}</p><p><b>วันนัด:</b> ${workflowDate(a)}</p></div><div class="record-meta"><span>สมัคร ${date(a.created_at)}</span><span>${is('COACH')&&a.coach_id===profile.id?'งานของฉัน':esc(person(is('COACH')?a.coach_id:a.owner_id))}</span></div><button data-open="${a.id}" ${training?'data-open-tab="training"':''}>รายละเอียด →</button></article>`).join('')}${!rows.length?`<div class="empty"><p>${active?'ไม่พบรายการที่ตรงกับเงื่อนไข':'ยังไม่มีรายการในระบบ'}</p>${active?button('ล้างตัวกรอง','clear-filters'):''}</div>`:''}</div>
- <div class="table-wrap applicant-desktop"><table class="applicant-table" data-row-offset="${filters.offset}"><thead><tr><th ${sortAria('full_name')}>${sorted('full_name','ชื่อผู้สมัคร')}</th><th>ขั้นตอนปัจจุบัน</th><th>รอผู้รับผิดชอบ</th><th ${sortAria('next_date')}>${sorted('next_date','วันนัดถัดไป')}</th><th ${sortAria('hiring_unit')}>${sorted('hiring_unit','หน่วยงาน')}</th><th>ตำแหน่ง</th>${!is('COACH')?`<th ${sortAria('age')}>${sorted('age','อายุ')}</th>`:''}<th>ประเภทรถ</th><th ${sortAria('created_at')}>${sorted('created_at','วันที่สมัคร')}</th>${is('COACH')?'<th>Driver Coach</th>':''}<th class="record-action"></th></tr></thead><tbody>${rows.map(a=>`<tr><td class="applicant-name-cell"><b>${esc(a.full_name)}</b><small class="cell-secondary">${esc(a.phone)}</small><small class="cell-secondary reference-code" title="${a.id}">${esc(applicantCode(a))}</small></td><td class="workflow-cell">${workflowBadge(a)}</td><td class="waiting-cell">${esc(workflowSummary(a,today(),person).waiting)}</td><td>${workflowDate(a)}</td><td>${esc(a.hiring_unit)}</td><td>${position(a.position)}</td>${!is('COACH')?`<td>${ageBadge(a.age_years,a.position)}</td>`:''}<td>${esc(a.vehicle_type||'—')}</td><td>${date(a.created_at)}</td>${is('COACH')?`<td>${a.coach_id===profile.id?'<span class="badge">งานของฉัน</span>':esc(person(a.coach_id))}</td>`:''}<td class="record-action"><button data-open="${a.id}" ${training?'data-open-tab="training"':''}>รายละเอียด ›</button></td></tr>`).join('')}</tbody></table>${!rows.length?`<div class="empty"><p>${active?'ไม่พบรายการที่ตรงกับเงื่อนไข':'ยังไม่มีรายการในระบบ'}</p>${active?button('ล้างตัวกรอง','clear-filters'):''}</div>`:''}</div>
+ <div class="applicant-mobile">${rows.map((a,i)=>`<article class="mobile-record"><small class="reference-code">ลำดับ ${filters.offset+i+1} · ${esc(applicantCode(a))}</small><div class="section-heading"><b>${esc(displayName(a))}</b>${workflowBadge(a)}</div><p>${position(a.position)} · ${esc(a.hiring_unit)}</p><div class="mobile-record-facts">${!is('COACH')?ageBadge(a.age_years,a.position):''}<span>${esc(a.vehicle_type||'—')}</span></div><div class="mobile-workflow"><p><b>รอ:</b> ${esc(workflowSummary(a,today(),person).waiting)}</p><p><b>วันนัด:</b> ${workflowDate(a)}</p></div><div class="record-meta"><span>สมัคร ${date(a.created_at)}</span><span>${is('COACH')&&a.coach_id===profile.id?'งานของฉัน':esc(person(is('COACH')?a.coach_id:a.owner_id))}</span></div><button data-open="${a.id}" ${training?'data-open-tab="training"':''}>รายละเอียด →</button></article>`).join('')}${!rows.length?`<div class="empty"><p>${active?'ไม่พบรายการที่ตรงกับเงื่อนไข':'ยังไม่มีรายการในระบบ'}</p>${active?button('ล้างตัวกรอง','clear-filters'):''}</div>`:''}</div>
+ <div class="table-wrap applicant-desktop"><table class="applicant-table" data-row-offset="${filters.offset}"><thead><tr><th>รหัสผู้สมัคร</th><th ${sortAria('full_name')}>${sorted('full_name','ชื่อผู้สมัคร')}</th><th>เบอร์โทรศัพท์</th><th>ขั้นตอนปัจจุบัน</th><th>รอผู้รับผิดชอบ</th><th ${sortAria('next_date')}>${sorted('next_date','วันนัดถัดไป')}</th><th ${sortAria('hiring_unit')}>${sorted('hiring_unit','หน่วยงาน')}</th><th>ตำแหน่ง</th>${!is('COACH')?`<th ${sortAria('age')}>${sorted('age','อายุ')}</th>`:''}<th>ประเภทรถ</th><th ${sortAria('created_at')}>${sorted('created_at','วันที่สมัคร')}</th>${is('COACH')?'<th>Driver Coach</th>':''}<th class="record-action"></th></tr></thead><tbody>${rows.map(a=>`<tr><td><span class="reference-code">${esc(applicantCode(a))}</span></td><td class="applicant-name-cell"><b>${esc(displayName(a))}</b></td><td>${esc(a.phone)}</td><td class="workflow-cell">${workflowBadge(a)}</td><td class="waiting-cell">${esc(workflowSummary(a,today(),person).waiting)}</td><td>${workflowDate(a)}</td><td>${esc(a.hiring_unit)}</td><td>${position(a.position)}</td>${!is('COACH')?`<td>${ageBadge(a.age_years,a.position)}</td>`:''}<td>${esc(a.vehicle_type||'—')}</td><td>${date(a.created_at)}</td>${is('COACH')?`<td>${a.coach_id===profile.id?'<span class="badge">งานของฉัน</span>':esc(person(a.coach_id))}</td>`:''}<td class="record-action"><button data-open="${a.id}" ${training?'data-open-tab="training"':''}>รายละเอียด ›</button></td></tr>`).join('')}</tbody></table>${!rows.length?`<div class="empty"><p>${active?'ไม่พบรายการที่ตรงกับเงื่อนไข':'ยังไม่มีรายการในระบบ'}</p>${active?button('ล้างตัวกรอง','clear-filters'):''}</div>`:''}</div>
  <div class="list-pagination"><small>ผลลัพธ์: ${start}–${end} จาก ${total}</small><div class="page-controls"><label>แสดงรายการ<select data-list-size aria-label="จำนวนรายการต่อหน้า">${[10,20,30,50,100].map(n=>`<option value="${n}" ${filters.size===n?'selected':''}>${n}</option>`).join('')}</select></label><button data-offset="0" aria-label="หน้าแรก" ${filters.offset===0?'disabled':''}>«</button><button data-page="-1" aria-label="หน้าก่อนหน้า" ${filters.offset===0?'disabled':''}>‹</button><span class="page-indicator">${Math.floor(filters.offset/filters.size)+1} / ${Math.max(1,Math.ceil(total/filters.size))}</span><button data-page="1" aria-label="หน้าถัดไป" ${filters.offset+filters.size>=total?'disabled':''}>›</button><button data-offset="${last}" aria-label="หน้าสุดท้าย" ${filters.offset>=last?'disabled':''}>»</button></div></div></section>`;
 }
 function personalSummary(a:Applicant) {
@@ -603,7 +608,7 @@ async function openApplicant(id: string, requestedTab?: DetailTab) {
     manage &&
     ["HR_REVIEW", "WAITING_INFO", "INTERVIEW"].includes(a.status) &&
     !a.owner_id
-      ? `<section class="card" data-detail-group="general"><h2>${a.status === "INTERVIEW" ? "ผลคัดกรอง / แก้ไขก่อนมีผู้รับงาน" : "HR คัดกรอง"}</h2><form id="screen"><div class="fields">${select(
+      ? `<section class="card" data-detail-group="general"><h2>${a.status === "INTERVIEW" ? "ส่งสัมภาษณ์แล้ว · รอหัวหน้างานรับ" : "HR คัดกรอง"}</h2>${a.status === "INTERVIEW" ? '<p class="notice">แก้ผลคัดกรองได้ก่อนที่หัวหน้างานรับงาน ระบบจะบันทึกประวัติการเปลี่ยนแปลง</p>' : ''}<form id="screen" ${a.status === "INTERVIEW" ? 'data-workflow-label="แก้ผลคัดกรอง"' : ''}><div class="fields">${select(
           "result",
           "ผลคัดกรอง",
           opts(
@@ -612,7 +617,7 @@ async function openApplicant(id: string, requestedTab?: DetailTab) {
               { value: "MORE_INFO", label: "ขอข้อมูลเพิ่ม" },
               { value: "REJECT", label: "ไม่ผ่าน" },
             ],
-            "FORWARD",
+            a.status === "WAITING_INFO" ? "MORE_INFO" : "FORWARD",
           ),
           true,
         )}${dates("followup_date", "วันติดตาม (บังคับเมื่อขอข้อมูลเพิ่ม)", a.data.followup_date)}${note(a.data.screen_note)}${field("age_note", "เหตุผลยกเว้นอายุ (คนขับต่ำกว่า 25 / เด็กติดรถต่ำกว่า 18 ปี)", a.data.age_note)}${field("duplicate_note", "เหตุผลยืนยันใบสมัครซ้ำ", a.data.duplicate_note, !!d.duplicates.length)}</div><button type="submit" class="primary">บันทึกผลคัดกรอง</button><p class="error" data-error></p></form></section>`
@@ -716,7 +721,7 @@ function organizeApplicant(a: Applicant, handoverComplete: boolean) {
   if(overview){
     const controls=overview.querySelector('.detail-head .actions')?.innerHTML||"";
     const matching=overview.querySelector('[data-action="match"]')?.outerHTML||"";
-    overview.innerHTML=`<div class="detail-head"><div class="identity-hero"><div class="identity-avatar">${navIcons.applicants}</div><div><h2>${esc(a.full_name)}</h2><div class="identity-badges"><span class="reference-code">${esc(applicantCode(a))}</span>${workflowBadge(a)}${!is('COACH')?ageBadge(ageOnDate(a.data.birth_date,today()),a.position):''}</div></div></div><div class="identity-side"><small>สมัครเมื่อ ${date(a.created_at)}</small><div class="actions">${controls}${matching}</div></div></div><div class="identity-meta"><span>${navIcons.applicants} ${position(a.position)}</span><span>${navIcons.requests} ${esc(a.hiring_unit)}</span><span>${icon('<path d="M2 6h12v11H2zM14 10h4l4 4v3h-8"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>')} ${esc(a.data.vehicle_type||'—')}</span><span>${esc(a.phone)}</span></div>`;
+    overview.innerHTML=`<div class="detail-head"><div class="identity-hero"><div class="identity-avatar">${navIcons.applicants}</div><div><h2>${esc(displayName(a))}</h2><div class="identity-badges"><span class="reference-code">${esc(applicantCode(a))}</span>${workflowBadge(a)}${!is('COACH')?ageBadge(ageOnDate(a.data.birth_date,today()),a.position):''}</div></div></div><div class="identity-side"><small>สมัครเมื่อ ${date(a.created_at)}</small><div class="actions">${controls}${matching}</div></div></div><div class="identity-meta"><span>${navIcons.applicants} ${position(a.position)}</span><span>${navIcons.requests} ${esc(a.hiring_unit)}</span><span>${icon('<path d="M2 6h12v11H2zM14 10h4l4 4v3h-8"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>')} ${esc(a.data.vehicle_type||'—')}</span><span>${esc(a.phone)}</span></div>`;
   }
   const secondaryActions=overview?.querySelector<HTMLElement>(".detail-head .actions");
   if(secondaryActions?.children.length) {
@@ -779,6 +784,7 @@ function dynamicRequirements() {
               )
             : value !== "FORWARD";
       input.required = required;
+      if(name === 'followup_date') input.disabled = value !== 'MORE_INFO';
       const label = input.closest("label")!;
       label.querySelector(".req")?.remove();
       if (required) {

@@ -31,6 +31,11 @@ export function esc(value: unknown): string {
       ]!,
   );
 }
+export function displayApplicantName(fullName: unknown, title: unknown): string {
+  const name=String(fullName||'').trim(), prefix=String(title||'').trim();
+  if(!prefix)return name;
+  return prefix+(name.startsWith(prefix)?name.slice(prefix.length).trimStart():name);
+}
 export function isoDate(value: string): string {
   if (!value) return "";
   const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value);
@@ -109,6 +114,8 @@ export interface Profile {
   version: number;
 }
 export interface Applicant {
+  reference_code?: string;
+  prefix?: string;
   document_code?: string;
   workflow_stage?: string;
   handover_missing?: string[];

@@ -49,6 +49,11 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
   await db.exec(await readFile(new URL("../supabase/migrations/20261025152924_google_drive_attachments_v410.sql",import.meta.url),"utf8"));
   await db.exec(await readFile(new URL("../supabase/migrations/20261027025639_applicant_corrections_v411.sql",import.meta.url),"utf8"));
   await db.exec(await readFile(new URL("../supabase/migrations/20261028102456_request_editing_v412.sql",import.meta.url),"utf8"));
+  await db.query("insert into rm_private.applicants(full_name,phone,position,original_unit,hiring_unit,created_at,document_code) values('ทดสอบ เดิม','0812345678','DRIVER',$1,$1,'2025-01-01T00:00:00+07','DRV-20250101-12345678')",[unit]);
+  await db.exec(await readFile(new URL("../supabase/migrations/20261028173123_applicant_reference_v413.sql",import.meta.url),"utf8"));
+  const legacy=(await db.query<{reference_code:string;document_code:string}>("select reference_code,document_code from rm_private.applicants where full_name='ทดสอบ เดิม'")).rows[0]!;
+  assert.equal(legacy.reference_code,'DRV-25010001');assert.equal(legacy.document_code,'DRV-20250101-12345678');
+  await db.query("delete from rm_private.applicants where full_name='ทดสอบ เดิม'");
   for (const [key, id] of Object.entries(ids)) {
     await db.query("insert into auth.users values($1,$2)", [
       id,
@@ -118,6 +123,16 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
     const a = await get(id);
     return cmd(user, action, { id, version: a.version, ...data });
   }
+  await t.test('monthly references share sequence across driver and helper, keep folders stable, and fail safely at capacity', async()=>{
+    const a=await db.query<{c:string}>("select rm_private.next_applicant_reference('DRIVER','2031-10-01T00:00:00+07') c");
+    const b=await db.query<{c:string}>("select rm_private.next_applicant_reference('HELPER','2031-10-02T00:00:00+07') c");
+    const c=await db.query<{c:string}>("select rm_private.next_applicant_reference('DRIVER','2031-11-01T00:00:00+07') c");
+    assert.equal(a.rows[0]!.c,'DRV-31100001');assert.equal(b.rows[0]!.c,'AST-31100002');assert.equal(c.rows[0]!.c,'DRV-31110001');
+    await db.query("update rm_private.applicant_month_sequences set last_value=9999 where month_key='203110'");
+    await assert.rejects(()=>db.query("select rm_private.next_applicant_reference('HELPER','2031-10-03T00:00:00+07')"),/เต็ม/);
+    assert.equal((await db.query<{n:number}>("select last_value n from rm_private.applicant_month_sequences where month_key='203110'")).rows[0]!.n,9999);
+    await db.query("delete from rm_private.applicant_month_sequences where month_key in ('203110','203111')");
+  });
   await t.test('HR correction preflight is read-only, scoped, audited, masked and versioned',async()=>{
     const {id}=await cmd('hr','create_applicant',app('แก้ไข ทดสอบ','0891111111'));const a=await get(id);
     await db.query("update rm_private.applicants set data=data-'driver_license_no' where id=$1",[id]);
@@ -530,7 +545,7 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
     await assert.rejects(()=>call(null,'recruitment_apply',payload)); // Original PIN ticket is still consumed once.
     const id1='41000000-0000-4000-8000-000000000001',id2='41000000-0000-4000-8000-000000000002',id3='41000000-0000-4000-8000-000000000003';
     const d={action:'upload',applicant_id:i,document_id:id1,filename:'ทดสอบ.png',mime_type:'image/png',byte_size:8,sha256:hash,upload_token:submitted.upload_token};
-    const reserved=await authorize(null,d);assert.equal(reserved.folder_code,submitted.reference_code);
+    const reserved=await authorize(null,d);assert.match(reserved.folder_code,/^(DRV|AST)-\d{8}-[A-F0-9]{8}$/);assert.match(submitted.reference_code,/^DRV-\d{8}$/);
     assert.equal((await authorize(null,d)).id,id1); // Retry uses the same reservation, not another quota slot.
     await assert.rejects(()=>authorize(null,{...d,document_id:id2,byte_size:10485761}));
     await assert.rejects(()=>authorize(null,{...d,document_id:id2,mime_type:'image/svg+xml'}));
