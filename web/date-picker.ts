@@ -14,7 +14,19 @@ export function installDatePickers() {
       if(active.has(input)) return;
       input.addEventListener('input',()=>{
         if(/^\d{8}$/.test(input.value)) input.value=input.value.slice(0,2)+'/'+input.value.slice(2,4)+'/'+input.value.slice(4);
+        input.setCustomValidity(input.value && !parseCalendarDate(input.value) ? 'วันที่ไม่ถูกต้อง กรุณากรอก dd/mm/yyyy (ค.ศ.)' : '');
       });
+      input.addEventListener('change',()=>input.setCustomValidity(input.value && !parseCalendarDate(input.value) ? 'วันที่ไม่ถูกต้อง กรุณากรอก dd/mm/yyyy (ค.ศ.)' : ''));
+      // Flatpickr clears an invalid manually typed value on blur. Preserve it
+      // so optional date fields cannot silently turn an invalid filter into no filter.
+      input.addEventListener('blur',()=>{
+        const value=input.value;
+        if(value && !parseCalendarDate(value)) queueMicrotask(()=>{
+          if(!input.isConnected)return;
+          input.value=value;
+          input.setCustomValidity('วันที่ไม่ถูกต้อง กรุณากรอก dd/mm/yyyy (ค.ศ.)');
+        });
+      },true);
       input.pattern='[0-9]{2}/[0-9]{2}/[0-9]{4}';
       input.title='เลือกจากปฏิทิน หรือพิมพ์ dd/mm/yyyy (ค.ศ.)';
       const picker=flatpickr(input,{

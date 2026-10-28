@@ -36,7 +36,8 @@ export function isoDate(value: string): string {
   const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value);
   if (!m) throw Error("กรอกวันที่ dd/mm/yyyy เช่น 19/10/2026 (ค.ศ.)");
   const s = `${m[3]}-${m[2]}-${m[1]}`;
-  if (new Date(s + "T00:00:00Z").toISOString().slice(0, 10) !== s)
+  const parsed = new Date(s + "T00:00:00Z");
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== s)
     throw Error("วันที่ไม่ถูกต้อง");
   return s;
 }

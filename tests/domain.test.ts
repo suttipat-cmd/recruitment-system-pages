@@ -5,6 +5,8 @@ test("dates display Gregorian dd/mm/yyyy and reject impossible dates", () => {
   assert.equal(date("2026-10-19T00:00:00Z"), "19/10/2026");
   assert.equal(isoDate("19/10/2026"), "2026-10-19");
   assert.throws(() => isoDate("31/02/2026"));
+  assert.throws(() => isoDate("00/01/2026"), /วันที่ไม่ถูกต้อง/);
+  assert.throws(() => isoDate("01/13/2026"), /วันที่ไม่ถูกต้อง/);
   assert.throws(() => isoDate("2026-10-19"));
 });
 test("retention cohort includes first day and excludes day 91 and future starts", () => {
