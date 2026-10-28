@@ -396,7 +396,7 @@ function applicantCode(a:Applicant) {
 function ageBadge(years:number|null|undefined, pos:string) {
  if(years===null||years===undefined)return '<span class="badge neutral">ยังไม่มีข้อมูลอายุ</span>';
  const eligible=years>=(pos==='DRIVER'?25:18);
- return `<span class="badge ${eligible?'':'bad'}"><span class="status-dot" aria-hidden="true"></span>${years} ปี · ${eligible?'ผ่านเกณฑ์':'ต่ำกว่าเกณฑ์'}</span>`;
+ return `<span class="badge ${eligible?'':'bad'}">${years} ปี · ${eligible?'ผ่านเกณฑ์':'ต่ำกว่าเกณฑ์'}</span>`;
 }
 async function applicantList() {
  const training=screen==='training';

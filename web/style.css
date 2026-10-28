@@ -657,3 +657,11 @@ dialog:has(.pdf-preview){max-width:1000px}.pdf-preview{width:100%;height:65dvh;m
 .correction-menu{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:20px 0}.correction-menu button{text-align:left;min-height:58px;white-space:normal}#correction-confirm .table-wrap{margin:20px 0;max-height:300px;overflow:auto}#correction-confirm td{white-space:normal;overflow-wrap:anywhere;max-width:240px}#correction-confirm .check{display:flex;gap:10px;align-items:flex-start;margin:16px 0;line-height:1.7}#correction-confirm .check input{width:18px;height:18px;flex-shrink:0;margin-top:5px}.timeline .table-wrap{margin:12px 0}.timeline td{white-space:normal;overflow-wrap:anywhere;max-width:230px}@media(max-width:700px){.correction-menu{grid-template-columns:1fr}#correction-confirm .table-wrap{max-height:240px}}
 
 .request-actions{margin:14px 0;gap:8px;flex-wrap:wrap}.request-actions button{white-space:normal}#request-change-confirm .table-wrap{margin:18px 0;max-height:260px;overflow:auto}#request-change-confirm td{white-space:normal;overflow-wrap:anywhere;max-width:220px}#request-change-confirm .check{display:flex;gap:10px;margin:14px 0;align-items:flex-start}#request-change-confirm .check input{width:18px;height:18px;flex-shrink:0;margin-top:4px}
+
+/* Keep table rows compact; full clipped grid values remain available on hover. */
+.table-wrap table th,.table-wrap table td,.table-wrap table td .badge{white-space:nowrap;overflow-wrap:normal}
+.applicant-grid .grid-cell-content{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.applicant-grid .grid-cell-content .cell-secondary{display:inline;margin:0 0 0 8px;white-space:nowrap}
+.applicant-grid .grid-cell-content .workflow-badge{white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:middle}
+.applicant-grid .grid-cell-content .badge{white-space:nowrap}
+.applicant-grid .grid-cell-content button{min-height:34px;padding:5px 10px}

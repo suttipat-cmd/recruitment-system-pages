@@ -22,8 +22,8 @@ export function mountApplicantGrid(root: HTMLElement) {
   const columns: ColDef<string[]>[] = headings.map((header, index) => ({
     headerName: header.textContent?.trim() || 'จัดการ',
     colId: String(index),
-    minWidth: index === 0 ? 72 : index === 1 ? 220 : index === headings.length - 1 ? 130 : 150,
-    width: index === 0 ? 72 : index === 1 ? 240 : index === headings.length - 1 ? 130 : 160,
+    minWidth: index === 0 ? 72 : index === 1 ? 220 : index === 2 || index === 3 ? 220 : index === headings.length - 1 ? 130 : 150,
+    width: index === 0 ? 72 : index === 1 ? 240 : index === 2 || index === 3 ? 240 : index === headings.length - 1 ? 130 : 160,
     pinned: index < 2 ? 'left' : index === headings.length - 1 ? 'right' : undefined,
     lockPinned: true,
     sortable: false,
@@ -32,6 +32,7 @@ export function mountApplicantGrid(root: HTMLElement) {
       const element = document.createElement('div');
       element.className = 'grid-cell-content';
       element.innerHTML = params.value || '';
+      element.title = Array.from(element.childNodes, node => node.textContent?.trim()).filter(Boolean).join(' · ');
       return element;
     },
     headerComponent: class {
@@ -45,7 +46,7 @@ export function mountApplicantGrid(root: HTMLElement) {
   }));
   try {
     grid = createGrid(host, {
-      theme: themeQuartz.withParams({accentColor:'#087a67', foregroundColor:'#263d48', backgroundColor:'#ffffff', headerBackgroundColor:'#f6f9f8', borderColor:'#dce8e4', fontFamily:'inherit', fontSize:13, rowHeight:78, headerHeight:52}),
+      theme: themeQuartz.withParams({accentColor:'#087a67', foregroundColor:'#263d48', backgroundColor:'#ffffff', headerBackgroundColor:'#f6f9f8', borderColor:'#dce8e4', fontFamily:'inherit', fontSize:13, rowHeight:44, headerHeight:44}),
       columnDefs: columns,
       rowData: rows,
       domLayout: 'autoHeight',
