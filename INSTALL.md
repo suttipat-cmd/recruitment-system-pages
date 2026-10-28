@@ -1,3 +1,7 @@
+## V4.12.0
+
+ติดตั้ง migration `20261028102456_request_editing_v412.sql` บน V4.11 ใน transaction ก่อนเผยแพร่เว็บ โดยตรวจ fingerprint และสิทธิ์ในฐานข้อมูล ไม่มีการล้างข้อมูล
+
 ## V4.11.0
 
 ติดตั้ง `supabase/migrations/20261027025639_applicant_corrections_v411.sql` ใน transaction บน V4.10 ก่อนเผยแพร่เว็บ สคริปต์ตรวจ fingerprint เดิมและเพิ่ม helper ที่เรียกผ่าน command ของ HR/Admin เท่านั้น ไม่มีการล้างข้อมูล ไม่เปลี่ยนสิทธิ์ผู้ใช้ ไม่แก้ Apps Script และไม่ต้อง Deploy Drive Bridge ใหม่

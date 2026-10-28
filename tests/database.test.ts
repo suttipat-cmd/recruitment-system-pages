@@ -48,6 +48,7 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
   await db.exec(await readFile(new URL("../supabase/migrations/20261025142241_workflow_visibility_v49.sql",import.meta.url),"utf8"));
   await db.exec(await readFile(new URL("../supabase/migrations/20261025152924_google_drive_attachments_v410.sql",import.meta.url),"utf8"));
   await db.exec(await readFile(new URL("../supabase/migrations/20261027025639_applicant_corrections_v411.sql",import.meta.url),"utf8"));
+  await db.exec(await readFile(new URL("../supabase/migrations/20261028102456_request_editing_v412.sql",import.meta.url),"utf8"));
   for (const [key, id] of Object.entries(ids)) {
     await db.query("insert into auth.users values($1,$2)", [
       id,
@@ -147,6 +148,49 @@ test("Postgres migration + complete workflows and authorization", async (t) => {
     await assert.rejects(()=>mutate('hr','change_unit',id,{unit:otherUnit,note:'ย้าย'}));
     await mutate('hr','change_unit',id,{unit:otherUnit,note:'ยืนยันย้าย',confirm_impact:true});b=await get(id);assert.equal(b.hiring_unit,otherUnit);assert.equal(b.original_unit,unit);assert.equal(b.coach_id,null);
     await db.query('delete from rm_private.activities where applicant_id=any($1::uuid[])',[[id,peer.id]]);await db.query('delete from rm_private.applicants where id=any($1::uuid[])',[[id,peer.id]]);
+  });
+  await t.test('request edits enforce scope, confirmation, concurrency and keep auditable linked history',async()=>{
+    const request=(await cmd('mgr','create_request',{title:'ขออัตรากำลังเพิ่ม',unit,lines:[{plate:'TEST-412',fleet_type:'COMPANY',position:'DRIVER'}]})).id;
+    let r=(await cmd('hr','requests')).find((x:any)=>x.id===request);let slot=r.slots[0];
+    const id=(await cmd('hr','create_applicant',app('ทดสอบ คำขอ','0884120000'))).id;
+    await cmd('hr','receive_request',{id:request,version:r.version});r=(await cmd('hr','requests')).find((x:any)=>x.id===request);slot=r.slots[0];
+    await mutate('hr','match',id,{slot_id:slot.id});r=(await cmd('hr','requests')).find((x:any)=>x.id===request);slot=r.slots[0];
+    const body=()=>({request_id:request,request_version:r.version,slot_id:slot.id,slot_version:slot.version,reason:'ตรวจและแก้ข้อมูล'});
+    const confirm=async(user:keyof typeof ids,action:string,payload:Record<string,unknown>)=>{const plan=await cmd(user,action,{...payload,preview:true});return cmd(user,action,{...payload,review_token:plan.review_token});};
+    await assert.rejects(()=>cmd('other','edit_request_slot',{...body(),plate:'NEW',fleet_type:'COMPANY',position:'DRIVER',confirm_changes:true}));
+    await assert.rejects(()=>cmd('coach','edit_request_slot',{...body(),plate:'NEW',fleet_type:'COMPANY',position:'DRIVER',confirm_changes:true}));
+    await assert.rejects(()=>cmd('mgr','edit_request',{request_id:request,request_version:r.version,title:r.title,unit:otherUnit,notes:'',reason:'ย้าย',confirm_changes:true,confirm_detach:true}));
+    const unitChange={request_id:request,request_version:r.version,title:r.title,unit:otherUnit,notes:r.notes,reason:'เปลี่ยนหน่วยงาน'};
+    const unitPlan=await cmd('hr','edit_request',{...unitChange,preview:true});assert.equal(unitPlan.impacts[0].applicant_id,id);
+    await assert.rejects(()=>cmd('hr','edit_request',{...unitChange,confirm_changes:true,review_token:unitPlan.review_token}));assert.equal((await get(id)).slot_id,slot.id);
+    await db.query('update rm_private.slots set version=version+1 where id=$1',[slot.id]);
+    await assert.rejects(()=>cmd('hr','edit_request',{...unitChange,confirm_changes:true,confirm_detach:true,review_token:unitPlan.review_token}));
+    r=(await cmd('hr','requests')).find((x:any)=>x.id===request);slot=r.slots[0];
+
+    const plan=await cmd('mgr','edit_request_slot',{...body(),plate:'NEW-412',fleet_type:'PARTNER',position:'DRIVER',preview:true});assert.equal(plan.impacts.length,0);
+    await assert.rejects(()=>cmd('mgr','edit_request_slot',{...body(),plate:'NEW-412',fleet_type:'PARTNER',position:'DRIVER'}));
+    await confirm('mgr','edit_request_slot',{...body(),plate:'NEW-412',fleet_type:'PARTNER',position:'DRIVER',confirm_changes:true});
+    const linked=await get(id);assert.equal(linked.slot_id,slot.id);assert.equal(linked.data.plate,'TEST-412');
+    await assert.rejects(()=>cmd('hr','edit_request_slot',{...body(),plate:'OLD',fleet_type:'PARTNER',position:'DRIVER',confirm_changes:true}));
+    r=(await cmd('hr','requests')).find((x:any)=>x.id===request);slot=r.slots[0];assert.equal(slot.plate,'NEW-412');
+    // A previously filled slot retains its original KPI completion timestamp even when correction unlinks it.
+    await db.query("update rm_private.slots set status='FILLED',filled_at=now(),first_filled_at=now(),version=version+1 where id=$1",[slot.id]);
+    await db.query("update rm_private.applicants set status='HIRED' where id=$1",[id]);
+    r=(await cmd('hr','requests')).find((x:any)=>x.id===request);slot=r.slots[0];const originalFirst=slot.first_filled_at;
+    const change={...body(),plate:slot.plate,fleet_type:slot.fleet_type,position:'HELPER'};
+    const warned=await cmd('mgr','edit_request_slot',{...change,preview:true});assert.equal(warned.impacts[0].applicant_id,id);
+    await assert.rejects(()=>cmd('mgr','edit_request_slot',{...change,review_token:warned.review_token,confirm_changes:true}));
+    await confirm('mgr','edit_request_slot',{...change,confirm_changes:true,confirm_detach:true});assert.equal((await get(id)).slot_id,null);
+    r=(await cmd('hr','requests')).find((x:any)=>x.id===request);slot=r.slots[0];assert.equal(slot.position,'HELPER');assert.equal(slot.status,'OPEN');assert.equal(slot.first_filled_at,originalFirst);assert.equal((await get(id)).status,'HIRED');
+    await confirm('mgr','cancel_request_slot',{...body(),confirm_changes:true});r=(await cmd('hr','requests')).find((x:any)=>x.id===request);slot=r.slots[0];assert.equal(slot.status,'CANCELLED');
+    await confirm('mgr','edit_request_slot',{...body(),plate:'RESTORED-412',fleet_type:'COMPANY',position:'HELPER',confirm_changes:true});r=(await cmd('hr','requests')).find((x:any)=>x.id===request);slot=r.slots[0];
+    await confirm('mgr','restore_request_slot',{...body(),confirm_changes:true});r=(await cmd('hr','requests')).find((x:any)=>x.id===request);slot=r.slots[0];assert.equal(slot.status,'OPEN');
+    await confirm('mgr','add_request_slot',{request_id:request,request_version:r.version,plate:'TEST-ADDED',fleet_type:'COMPANY',position:'DRIVER',reason:'เพิ่ม',confirm_changes:true});
+    r=(await cmd('hr','requests')).find((x:any)=>x.id===request);assert.equal(r.slots.length,2);
+    await confirm('hr','edit_request',{request_id:request,request_version:r.version,title:'ทดแทนอัตรากำลังเดิม',unit:otherUnit,notes:'ปรับ',reason:'หน่วยงานผิด',confirm_changes:true});
+    r=(await cmd('hr','requests')).find((x:any)=>x.id===request);assert.equal(r.unit,otherUnit);const history=await cmd('hr','request_history',{request_id:request});assert.equal(history.length,7);assert.equal(JSON.parse(history[0].note).before.unit,unit);
+    await assert.rejects(()=>cmd('mgr','request_history',{request_id:request}));assert.ok((await cmd('hr','detail',{id})).activities.some((x:any)=>x.action==='REQUEST_UNLINKED_V412'));
+    await db.query("delete from rm_private.activities where applicant_id=$1 or note like $2",[id,'%'+request+'%']);await db.query('delete from rm_private.slots where request_id=$1',[request]);await db.query('delete from rm_private.requests where id=$1',[request]);await db.query('delete from rm_private.applicants where id=$1',[id]);
   });
   let aId = "",
     req: any,

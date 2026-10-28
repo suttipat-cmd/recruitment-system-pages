@@ -23,6 +23,7 @@ await db.exec(await readFile(new URL("../supabase/migrations/20261020130620_appl
 await db.exec(await readFile(new URL("../supabase/migrations/20261025142241_workflow_visibility_v49.sql",import.meta.url),"utf8"));
 await db.exec(await readFile(new URL("../supabase/migrations/20261025152924_google_drive_attachments_v410.sql",import.meta.url),"utf8"));
   await db.exec(await readFile(new URL("../supabase/migrations/20261027025639_applicant_corrections_v411.sql",import.meta.url),"utf8"));
+  await db.exec(await readFile(new URL("../supabase/migrations/20261028102456_request_editing_v412.sql",import.meta.url),"utf8"));
 const users = [
   "admin",
   "hr",

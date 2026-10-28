@@ -31,6 +31,7 @@ let units: string[] = [];
 let people: Row[] = [];
 let topics: Row[] = [];
 let settings: Row = {};
+let requestEditPending: {action:string;payload:Row}|null=null;
 let screen = "dashboard";
 const blankFilters = () => ({search:"",status:"",unit:"",offset:0,size:20,sort:"created_at",order:"desc",position:"",vehicle:"",age_min:"",age_max:"",from:"",to:"",workflow_stage:"",queue:""});
 let filters = blankFilters();
@@ -318,7 +319,7 @@ function shell(body: string) {
     ...(is("ADMIN") ? [["admin", "ตั้งค่าระบบ"]] : []),
   ];
   const navButton = (key:string,label:string) => `<button type="button" data-nav="${key}" title="${label}" aria-label="${label}" ${screen === key ? 'aria-current="page"' : ''} class="${screen === key ? "active" : ""}"><span class="nav-icon" aria-hidden="true">${navIcons[key]}</span><span class="nav-label">${label}</span></button>`;
-  root.innerHTML = `<div class="shell" data-role="${profile.role}"><aside class="sidebar" aria-label="เมนูหลัก"><div class="brand"><span class="brand-mark">${navIcons.applicants}</span><span class="nav-label">Recruitment<small>MANAGEMENT · V4.11</small></span></div><button class="mobile-menu" type="button" data-action="toggle-menu" aria-expanded="false" aria-label="เปิดหรือปิดเมนู">☰ เมนู</button><nav>${nav.map(([key,label]) => navButton(key!,label!)).join("")}</nav><div class="bottom"><button type="button" data-action="apply" title="แบบฟอร์มสมัครงาน" aria-label="แบบฟอร์มสมัครงาน"><span class="nav-icon" aria-hidden="true">↗</span><span class="nav-label">แบบฟอร์มสมัครงาน</span></button><div class="profile"><span class="avatar" aria-hidden="true">${esc(profile.display_name.slice(0,1))}</span><span class="nav-label">${esc(profile.display_name)}<small>${roles[profile.role]}</small></span></div><button type="button" data-action="logout" title="ออกจากระบบ" aria-label="ออกจากระบบ"><span class="nav-icon" aria-hidden="true">⇥</span><span class="nav-label">ออกจากระบบ</span></button></div></aside><main class="content"><div class="workspace-context"><span>${roles[profile.role]} Workspace</span><span>${esc(is("MANAGER") ? profile.all_units ? "ทุกหน่วยงาน · สิทธิ์พิเศษ" : profile.units.join(" · ") : "Recruitment System")}</span></div>${body}</main></div>`;
+  root.innerHTML = `<div class="shell" data-role="${profile.role}"><aside class="sidebar" aria-label="เมนูหลัก"><div class="brand"><span class="brand-mark">${navIcons.applicants}</span><span class="nav-label">Recruitment<small>MANAGEMENT · V4.12</small></span></div><button class="mobile-menu" type="button" data-action="toggle-menu" aria-expanded="false" aria-label="เปิดหรือปิดเมนู">☰ เมนู</button><nav>${nav.map(([key,label]) => navButton(key!,label!)).join("")}</nav><div class="bottom"><button type="button" data-action="apply" title="แบบฟอร์มสมัครงาน" aria-label="แบบฟอร์มสมัครงาน"><span class="nav-icon" aria-hidden="true">↗</span><span class="nav-label">แบบฟอร์มสมัครงาน</span></button><div class="profile"><span class="avatar" aria-hidden="true">${esc(profile.display_name.slice(0,1))}</span><span class="nav-label">${esc(profile.display_name)}<small>${roles[profile.role]}</small></span></div><button type="button" data-action="logout" title="ออกจากระบบ" aria-label="ออกจากระบบ"><span class="nav-icon" aria-hidden="true">⇥</span><span class="nav-label">ออกจากระบบ</span></button></div></aside><main class="content"><div class="workspace-context"><span>${roles[profile.role]} Workspace</span><span>${esc(is("MANAGER") ? profile.all_units ? "ทุกหน่วยงาน · สิทธิ์พิเศษ" : profile.units.join(" · ") : "Recruitment System")}</span></div>${body}</main></div>`;
   compactForms();
   numberTableRows(root);
 }
@@ -758,7 +759,7 @@ function actionLabel(a: string) {
         RELEASE_INTERVIEW: "คืนคิวสัมภาษณ์",
         INTERVIEW: "บันทึกผลสัมภาษณ์",
         MATCH: "เปลี่ยนการผูกคำขอ",
-        EDIT_APPLICANT: "แก้ไขข้อมูล / หน่วยงาน",CORRECT_APPLICANT:"แก้ไขข้อมูลใบสมัคร",CHANGE_UNIT:"เปลี่ยนหน่วยงานที่รับจริง",
+        EDIT_APPLICANT: "แก้ไขข้อมูล / หน่วยงาน",CORRECT_APPLICANT:"แก้ไขข้อมูลใบสมัคร",CHANGE_UNIT:"เปลี่ยนหน่วยงานที่รับจริง",REQUEST_UNLINKED_V412:"ปลดการผูกคำขอ",
         RESERVE: "เก็บเป็นผู้สมัครสำรอง",
         RECALL: "เรียกผู้สมัครกลับ",
         HANDOVER: "ส่งมอบผู้ดูแล",
@@ -802,6 +803,25 @@ function dynamicRequirements() {
     }
   }
 }
+const requestEditLabels:Record<string,string>={title:'หัวข้อคำขอ',unit:'หน่วยงาน',notes:'หมายเหตุ',plate:'ทะเบียนรถ',fleet_type:'ประเภทรถ',position:'ตำแหน่ง',status:'สถานะ'};
+function requestValue(k:string,v:unknown){if(v===undefined||v===null||v==='')return '—';if(k==='fleet_type')return fleet(v);if(k==='position')return position(v);if(k==='status')return ({OPEN:'ว่าง',MATCHED:'ผูกผู้สมัคร',FILLED:'รับผ่านแล้ว',CANCELLED:'ยกเลิก'} as Record<string,string>)[String(v)]||String(v||'—');return String(v||'—');}
+function requestDiff(before:Row,after:Row){const keys=Array.from(new Set([...Object.keys(before||{}),...Object.keys(after||{})])).filter(k=>before?.[k]!==after?.[k]);return `<div class="table-wrap"><table data-numbered="true"><thead><tr><th>ลำดับ</th><th>ข้อมูล</th><th>ก่อนแก้</th><th>หลังแก้</th></tr></thead><tbody>${keys.map((k,i)=>`<tr><td>${i+1}</td><td>${esc(requestEditLabels[k]||k)}</td><td>${esc(requestValue(k,before?.[k]))}</td><td>${esc(requestValue(k,after?.[k]))}</td></tr>`).join('')}</tbody></table></div>`;}
+function requestFields(s?:Row){return `<div class="fields">${field('plate','ทะเบียนรถ',s?.plate||'',true,'text','maxlength="50"')}${select('fleet_type','ประเภทรถ',opts([{value:'COMPANY',label:'รถบริษัท'},{value:'PARTNER',label:'รถร่วม'}],s?.fleet_type||'COMPANY'),true)}${select('position','ตำแหน่ง',opts([{value:'DRIVER',label:'พนักงานขับรถ'},{value:'HELPER',label:'เด็กติดรถ'}],s?.position||'DRIVER'),true)}</div>`;}
+async function openRequestEditor(action:string,id:string,slotId?:string){
+ const fresh=await rpc('requests') as Row[];const r=fresh.find(x=>x.id===id);if(!r)throw Error('ไม่พบคำขอหรือไม่มีสิทธิ์');const slot=slotId?r.slots.find((x:Row)=>x.id===slotId):null;if(slotId&&!slot)throw Error('ไม่พบอัตราหรือข้อมูลเปลี่ยนแล้ว');
+ if(action==='request_history'){
+  const history=await rpc('request_history',{request_id:id}) as Row[];
+  openModal('ประวัติแก้ไขคำขอ',history.length?history.map(x=>{let v:Row;try{v=JSON.parse(x.note)}catch{return ''};return `<div class="timeline"><small>${date(x.created_at)} ${new Date(x.created_at).toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'})} · ${esc(x.display_name||'ผู้ใช้งาน')}</small><p><b>${esc(v.action)}</b> · ${esc(v.reason)}</p>${requestDiff(v.before,v.after)}${v.detached_count?`<small>ปลดผู้สมัคร ${Number(v.detached_count)} รายการ</small>`:''}</div>`}).join(''):'<p>ยังไม่มีประวัติการแก้ไข</p>');return;
+ }
+ const base={request_id:id,request_version:r.version,...(slot?{slot_id:slot.id,slot_version:slot.version}:{})};requestEditPending={action,payload:base};
+ const title=({edit_request:'แก้ไขคำขอ',edit_request_slot:'แก้ไขอัตรา',add_request_slot:'เพิ่มอัตรา',cancel_request_slot:'ยกเลิกอัตรา',restore_request_slot:'คืนอัตราที่ถูกยกเลิก'} as Record<string,string>)[action];
+ let body='';
+ if(action==='edit_request')body=`<div class="fields">${select('title','หัวข้อคำขอ',opts(['ทดแทนอัตรากำลังเดิม','ขออัตรากำลังเพิ่ม'].map(value=>({value,label:value})),r.title),true)}${select('unit','หน่วยงาน',unitOpts(r.unit,is('MANAGER')&&!profile.all_units?profile.units:units),true)}<label class="full">หมายเหตุคำขอ<textarea name="notes" maxlength="5000">${esc(r.notes||'')}</textarea></label></div>`;
+ else if(action==='edit_request_slot'||action==='add_request_slot')body=requestFields(slot);
+ else body=`<p>ทะเบียน <b>${esc(slot.plate)}</b> · ${esc(position(slot.position))} · ${esc(fleet(slot.fleet_type))}</p>`;
+ openModal(title||'แก้ไขคำขอ',`${body}<div class="fields">${note('',true,'เหตุผลที่แก้ไข')}</div>`,'request-change');
+ const submit=modal.querySelector<HTMLButtonElement>('button[type=submit]');if(submit)submit.textContent='ตรวจสอบผลกระทบ →';
+}
 async function requestsPage() {
   const rows = (await rpc("requests")) as Row[];
   return (
@@ -813,7 +833,7 @@ async function requestsPage() {
     rows
       .map(
         (r) =>
-          `<section class="card"><div class="detail-head"><div><h2>${esc(r.title)}</h2><p class="muted">${esc(r.unit)} · ขอ ${date(r.created_at)} โดย ${esc(person(r.created_by))}</p></div><div>${r.received_at ? `<span class="badge">HR รับ ${date(r.received_at)}</span>` : is("ADMIN", "HR") ? `<button data-receive="${r.id}" data-version="${r.version}" class="primary">รับเรื่อง</button>` : '<span class="badge warn">รอ HR รับเรื่อง</span>'}</div></div><p>${esc(r.notes)}</p><div class="table-wrap"><table><thead><tr><th>ทะเบียน</th><th>รถ</th><th>ตำแหน่ง</th><th>สถานะ</th><th>ยืนยันรับคน</th><th></th></tr></thead><tbody>${r.slots.map((s: Row) => `<tr><td>${esc(s.plate)}</td><td>${fleet(s.fleet_type)}</td><td>${position(s.position)}</td><td>${({ OPEN: "ว่าง", MATCHED: "ผูกผู้สมัคร", FILLED: "รับผ่านแล้ว", CANCELLED: "ยกเลิก" } as Record<string, string>)[s.status]}</td><td>${date(s.filled_at)}</td><td>${s.applicant_id ? `<button data-open="${s.applicant_id}">ดูผู้สมัคร</button>` : is("ADMIN", "HR") && s.status === "OPEN" ? `<button data-cancel-slot="${s.id}" data-version="${s.version}" class="danger">ยกเลิกอัตรา</button>` : ""}</td></tr>`).join("")}</tbody></table></div></section>`,
+          `<section class="card"><div class="detail-head"><div><h2>${esc(r.title)}</h2><p class="muted">${esc(r.unit)} · ขอ ${date(r.created_at)} โดย ${esc(person(r.created_by))}</p></div><div>${r.received_at ? `<span class="badge">HR รับ ${date(r.received_at)}</span>` : is("ADMIN", "HR") ? `<button data-receive="${r.id}" data-version="${r.version}" class="primary">รับเรื่อง</button>` : '<span class="badge warn">รอ HR รับเรื่อง</span>'}</div></div><p>${esc(r.notes)}</p><div class="actions request-actions"><button data-request-edit="${r.id}">แก้ไขคำขอ</button><button data-request-add="${r.id}">+ เพิ่มอัตรา</button><button data-request-history="${r.id}">ประวัติแก้ไข</button></div><div class="table-wrap"><table><thead><tr><th>ทะเบียน</th><th>รถ</th><th>ตำแหน่ง</th><th>สถานะ</th><th>ยืนยันรับคน</th><th></th></tr></thead><tbody>${r.slots.map((s: Row) => `<tr><td>${esc(s.plate)}</td><td>${fleet(s.fleet_type)}</td><td>${position(s.position)}</td><td>${({ OPEN: "ว่าง", MATCHED: "ผูกผู้สมัคร", FILLED: "รับผ่านแล้ว", CANCELLED: "ยกเลิก" } as Record<string, string>)[s.status]}</td><td>${date(s.filled_at)}</td><td>${s.applicant_id ? `<button data-open="${s.applicant_id}">ดูผู้สมัคร</button>` : ""}<button data-request-slot="${r.id}" data-slot-id="${s.id}">แก้ไข</button>${s.status === "CANCELLED" ? `<button data-request-restore="${r.id}" data-slot-id="${s.id}">คืนอัตรา</button>` : `<button data-request-cancel="${r.id}" data-slot-id="${s.id}" class="danger">ยกเลิกอัตรา</button>`}</td></tr>`).join("")}</tbody></table></div></section>`,
       )
       .join("") +
     (!rows.length
@@ -1278,6 +1298,12 @@ document.addEventListener("click", (e) => {
       }
       if (el.hasAttribute("data-remove-line"))
         el.closest(".request-line")?.remove();
+      if(el.dataset.requestEdit)await openRequestEditor('edit_request',el.dataset.requestEdit);
+      if(el.dataset.requestAdd)await openRequestEditor('add_request_slot',el.dataset.requestAdd);
+      if(el.dataset.requestHistory)await openRequestEditor('request_history',el.dataset.requestHistory);
+      if(el.dataset.requestSlot)await openRequestEditor('edit_request_slot',el.dataset.requestSlot,el.dataset.slotId);
+      if(el.dataset.requestCancel)await openRequestEditor('cancel_request_slot',el.dataset.requestCancel,el.dataset.slotId);
+      if(el.dataset.requestRestore)await openRequestEditor('restore_request_slot',el.dataset.requestRestore,el.dataset.slotId);
       if (el.dataset.receive) {
         await rpc("receive_request", {
           id: el.dataset.receive,
@@ -1496,6 +1522,17 @@ document.addEventListener("submit", (e) => {
           toast("ส่งคำขอแล้ว");
           await render();
           break;
+        }
+        case "request-change": {
+          if(!requestEditPending)throw Error('เปิดคำขอใหม่');const {action,payload}=requestEditPending;
+          const proposal:Row={...payload,...d,reason:String(d.note||'')};delete proposal.note;
+          const plan=await rpc(action,{...proposal,preview:true});requestEditPending={action,payload:{...proposal,review_token:plan.review_token}};
+          const impact=plan.impacts as Row[];
+          openModal('ตรวจสอบก่อนบันทึก',`<p><b>${esc(plan.audit.action)}</b></p>${requestDiff(plan.audit.before,plan.audit.after)}<p>เหตุผล: ${esc(proposal.reason)}</p>${impact.length?`<div class="notice warn"><b>ต้องปลดผู้สมัคร ${impact.length} รายการ</b><ul>${impact.map((x:Row)=>`<li>${esc(x.name)} · ทะเบียน ${esc(x.plate)}</li>`).join('')}</ul><p>สถานะการรับสมัครและข้อมูลส่งมอบของผู้สมัครไม่เปลี่ยนอัตโนมัติ</p></div>`:''}<div class="notice">การเพิ่ม ยกเลิก คืน เปลี่ยนตำแหน่งหรือหน่วยงาน อาจเปลี่ยนผล KPI 14 วันตามข้อมูลคำขอปัจจุบัน ระบบคงวันที่รับผ่านครั้งแรกของอัตราไว้ ทะเบียน/รถในข้อมูลพนักงานแก้แยกได้</div><label class="check"><input type="checkbox" name="confirm_changes" required> ตรวจสอบข้อมูลและผลกระทบแล้ว <span class="req">*</span></label>${impact.length?'<label class="check"><input type="checkbox" name="confirm_detach" required> ยืนยันปลดการผูกผู้สมัครตามรายการข้างต้น <span class="req">*</span></label>':''}`,'request-change-confirm');break;
+        }
+        case "request-change-confirm": {
+          if(!requestEditPending)throw Error('เปิดคำขอใหม่');const {action,payload}=requestEditPending;
+          await rpc(action,{...payload,confirm_changes:d.confirm_changes==='on',confirm_detach:d.confirm_detach==='on'});requestEditPending=null;modal.close();toast('บันทึกคำขอและประวัติแล้ว');await render();break;
         }
         case "cancel-slot":
           await rpc("cancel_slot", d);
