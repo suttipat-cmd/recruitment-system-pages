@@ -1,0 +1,93 @@
+/* Shared visual tokens and components for staff and application screens. */
+:root {
+  --ui-primary: #087a67;
+  --ui-primary-hover: #066552;
+  --ui-text: #1b3038;
+  --ui-muted: #677f8a;
+  --ui-border: #dce6e3;
+  --ui-surface: #fff;
+  --ui-focus: #62b49a;
+  --ui-radius: 8px;
+  --ui-space-1: 4px;
+  --ui-space-2: 8px;
+  --ui-space-3: 12px;
+  --ui-space-4: 16px;
+  --ui-space-5: 20px;
+  --ui-control-height: 40px;
+}
+
+body { color: var(--ui-text); font-size: 14px; line-height: 1.55; }
+h1 { line-height: 1.35; }
+h2, h3 { line-height: 1.4; }
+main.content { min-width: 0; }
+.card, .surface { min-width: 0; border-color: var(--ui-border); }
+.card { border-radius: 10px; padding: var(--ui-space-5); margin-bottom: var(--ui-space-4); }
+.card h2 { margin-bottom: var(--ui-space-3); }
+.topbar { gap: var(--ui-space-4); margin-bottom: var(--ui-space-5); }
+.topbar .actions, .actions { gap: var(--ui-space-2); }
+
+button, .button {
+  border-radius: var(--ui-radius);
+  min-height: var(--ui-control-height);
+  padding: 8px 12px;
+  line-height: 1.35;
+}
+button.primary, .button.primary { color: #fff; background: var(--ui-primary); border-color: var(--ui-primary); }
+button.primary:hover, .button.primary:hover { color: #fff; background: var(--ui-primary-hover); border-color: var(--ui-primary-hover); }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible {
+  outline: 3px solid var(--ui-focus); outline-offset: 2px;
+}
+button:disabled { cursor: not-allowed; }
+label { line-height: 1.45; }
+input:not([type=checkbox]):not([type=radio]):not([type=file]), select, textarea {
+  min-height: var(--ui-control-height); border-radius: var(--ui-radius);
+  border-color: var(--ui-border); padding: 8px 12px;
+}
+input[data-date] { padding-right: 38px !important; }
+textarea:not([type=checkbox]):not([type=radio]):not([type=file]) { min-height: 84px; }
+.fields, .list-filter-grid { gap: var(--ui-space-3) var(--ui-space-4); }
+.req { color: #c43838; margin-left: 3px; }
+.badge { line-height: 1.4; }
+.notice { border-radius: var(--ui-radius); }
+.table-wrap { max-width: 100%; }
+.table-wrap table th, .table-wrap table td { padding: 9px 12px; vertical-align: middle; }
+.table-wrap .table-secondary { margin-left: 8px; color: var(--ui-muted); }
+.table-wrap td button { min-height: 34px; padding: 5px 10px; }
+.applicant-grid .grid-cell-content button { min-height: 34px; padding: 5px 10px; }
+.filter-panel { padding: 0; }
+.filter-panel > summary { padding: var(--ui-space-4) var(--ui-space-5); }
+.list-table-heading { padding: var(--ui-space-4) var(--ui-space-5); }
+.list-pagination { gap: var(--ui-space-3); }
+.task-grid { gap: var(--ui-space-4); }
+.queue-more, .stat button { color: var(--ui-primary); }
+.section-heading { gap: var(--ui-space-3); }
+.case-summary { padding: var(--ui-space-5); }
+.document-card, .selected-file, .attachment-fields { border-radius: var(--ui-radius); }
+dialog { width: min(720px, calc(100% - 32px)); max-height: calc(100dvh - 32px); border-radius: 12px; padding: 24px; }
+dialog h2 { margin-bottom: var(--ui-space-4); padding-bottom: var(--ui-space-3); }
+dialog .form-footer { margin-top: var(--ui-space-4); padding-top: var(--ui-space-4); }
+dialog .fields { margin-bottom: var(--ui-space-4); }
+.apply-section { padding: 22px; border-radius: 12px; }
+.apply-section .fields { gap: var(--ui-space-4); }
+.apply-title h1 { line-height: 1.35; }
+
+/* Native calendar controls, checkboxes and compact grid headers keep their own sizing. */
+.flatpickr-calendar input.cur-year { min-height: 0 !important; padding: 0 !important; }
+.column-sort { min-height: 24px; padding: 0; }
+.sidebar button { min-height: 44px; }
+
+@media (max-width: 700px) {
+  :root { --ui-control-height: 44px; }
+  main.content { padding: 16px 14px 32px; }
+  .card { padding: var(--ui-space-4); }
+  .topbar { align-items: stretch; gap: var(--ui-space-3); }
+  .topbar .actions { gap: var(--ui-space-2); }
+  .filter-panel { padding: 0; }
+  .filter-panel > summary, .list-table-heading { padding: 14px 16px; }
+  .case-summary { padding: var(--ui-space-4); }
+  dialog { width: calc(100% - 24px); max-height: calc(100dvh - 24px); padding: 20px 16px; }
+  dialog h2 { padding-right: 42px; }
+  .apply-section { padding: 18px 16px; }
+  .apply-section .fields, .fields, .list-filter-grid { gap: var(--ui-space-3); }
+  .table-wrap td button { min-height: 44px; }
+}

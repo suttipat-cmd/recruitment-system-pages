@@ -5,6 +5,7 @@ import {detailTabs,queueDefinitions,progressState,nextTask,type DetailTab} from 
 import {installDatePickers} from "./date-picker";
 import { appAddress, configAddress, attachmentsEnabled } from "./runtime";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { button, field, select, note } from "./components";
 import {
   roles,
   statuses,
@@ -22,6 +23,7 @@ import {
   type Role,
 } from "./domain";
 import "./style.css";
+import "./design-system.css";
 type Row = Record<string, any>;
 const root = document.querySelector<HTMLDivElement>("#app")!;
 const modal = document.querySelector<HTMLDialogElement>("#modal")!;
@@ -48,8 +50,6 @@ const position = (p: unknown) =>
   p === "DRIVER" ? "พนักงานขับรถ" : "เด็กติดรถ";
 const fleet = (p: unknown) =>
   p === "COMPANY" ? "รถบริษัท" : p === "PARTNER" ? "รถร่วม" : "—";
-const button = (text: string, act: string, cls = "") =>
-  `<button type="button" data-action="${act}" class="${cls}">${text}</button>`;
 const opts = (
   rows: { value: string; label: string }[],
   selected: unknown = "",
@@ -104,24 +104,6 @@ async function rpc(action: string, payload: Row = {}): Promise<any> {
     );
   return data;
 }
-function field(
-  name: string,
-  label: string,
-  value: unknown = "",
-  required = false,
-  type = "text",
-  extra = "",
-) {
-  return `<label>${label}${required ? '<span class="req">*</span>' : ""}<input name="${name}" type="${type}" value="${esc(value)}" ${required ? "required" : ""} ${extra}></label>`;
-}
-function select(
-  name: string,
-  label: string,
-  options: string,
-  required = false,
-) {
-  return `<label>${label}${required ? '<span class="req">*</span>' : ""}<select name="${name}" ${required ? "required" : ""}>${options}</select></label>`;
-}
 const dates = (
   name: string,
   label: string,
@@ -136,12 +118,6 @@ const dates = (
     "text",
     'placeholder="dd/mm/yyyy" inputmode="numeric" data-date maxlength="10"',
   );
-const note = (
-  value: unknown = "",
-  required = false,
-  label = "บันทึก / เหตุผล",
-) =>
-  `<label class="full">${label}${required ? '<span class="req">*</span>' : ""}<textarea name="note" maxlength="5000" ${required ? "required" : ""}>${esc(value)}</textarea></label>`;
 function dataOf(form: HTMLFormElement): Row {
   const d = Object.fromEntries(new FormData(form));
   for (const input of form.querySelectorAll<HTMLInputElement>("[data-date]")) {
@@ -170,7 +146,7 @@ function numberTableRows(container: ParentNode) {
 }
 function openModal(title: string, body: string, formId?: string) {
   delete modal.dataset.pdfRequest;
-  modal.innerHTML = `${button("✕", "close-modal", "close")}<h2 id="dialog-title">${title}</h2>${formId ? `<form id="${formId}">${body}<div class="actions"><button class="primary" type="submit">บันทึก</button>${button("ยกเลิก", "close-modal")}</div><p class="error" data-error></p></form>` : body}`;
+  modal.innerHTML = `${button("✕", "close-modal", "close")}<h2 id="dialog-title">${title}</h2>${formId ? `<form id="${formId}">${body}<div class="actions form-footer"><button class="primary" type="submit">บันทึก</button>${button("ยกเลิก", "close-modal")}</div><p class="error" data-error></p></form>` : body}`;
   modal.setAttribute("aria-labelledby","dialog-title");
   numberTableRows(modal);
   modal.showModal();
@@ -698,7 +674,7 @@ async function openApplicant(id: string, requestedTab?: DetailTab) {
             true,
           )}${note()}</div><button type="submit" class="primary">บันทึกอบรม</button><p class="error" data-error></p></form>`
         : `<p class="muted">${is("HR","MANAGER") ? "ยังไม่มีหัวข้อประเภทใหม่ที่ตรงกับพนักงานนี้ กรุณาเพิ่มหัวข้ออบรม" : "บันทึกอบรมได้เฉพาะ HR และ Supervisor ในหน่วยงาน"}</p>`
-    }${is("HR","MANAGER") ? button("+ เพิ่มหัวข้ออบรม", "new-topic") : ""}<div class="table-wrap"><table><thead><tr><th>หัวข้อ</th><th>วันที่</th><th>ผล</th><th></th></tr></thead><tbody>${d.training.map((tr: Row) => `<tr><td>${esc(tr.title)}<br><small>${categories[tr.category] || "ประเภทเดิม"} · ${esc(tr.note)}</small></td><td>${date(tr.training_date)}</td><td>${tr.result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</td><td>${Object.hasOwn(categories,tr.category) && canTrain(profile.role, profile.units, a, profile.id, tr.category, !!profile.all_units) ? `<button data-training="${tr.id}">แก้ไข</button>` : ""}</td></tr>`).join("")}</tbody></table></div></section>`;
+    }${is("HR","MANAGER") ? button("+ เพิ่มหัวข้ออบรม", "new-topic") : ""}<div class="table-wrap"><table><thead><tr><th>หัวข้อ</th><th>วันที่</th><th>ผล</th><th></th></tr></thead><tbody>${d.training.map((tr: Row) => `<tr><td>${esc(tr.title)}<small class="table-secondary">${categories[tr.category] || "ประเภทเดิม"} · ${esc(tr.note)}</small></td><td>${date(tr.training_date)}</td><td>${tr.result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</td><td>${Object.hasOwn(categories,tr.category) && canTrain(profile.role, profile.units, a, profile.id, tr.category, !!profile.all_units) ? `<button data-training="${tr.id}">แก้ไข</button>` : ""}</td></tr>`).join("")}</tbody></table></div></section>`;
   }
   body += `<section class="card" data-detail-group="history"><h2>ประวัติการดำเนินการ</h2>${d.activities.map((e: Row) => `<div class="timeline"><small>${date(e.created_at)} · ${esc(e.display_name || "ผู้สมัคร")}</small><p><b>${esc(actionLabel(e.action))}</b></p><div>${correctionHistory(e.note)}</div></div>`).join("")}</section></div><div>${personalSummary(a)}${hired ? `<section class="card" data-detail-group="employment"><h2>ข้อมูลดูแลพนักงาน</h2><div class="keyvals"><div><small>Coach</small>${esc(person(a.coach_id))}</div><div><small>Supervisor</small>${esc(person(a.supervisor_id))}</div><div><small>ทะเบียน / รถ</small>${esc(a.data.plate || "—")} / ${fleet(a.data.fleet_type)}</div><div><small>เริ่มงานจริง</small>${date(a.actual_start_date)}</div><div><small>สถานะงาน</small>${a.employment_status === "RESIGNED" ? "ลาออก" : a.employment_status === "ACTIVE" ? "ทำงานอยู่" : "รอเริ่มงาน"}</div><div><small>ลาออก</small>${date(a.resignation_date)}</div></div></section>` : ""}${evals.length ? `<section class="card" data-detail-group="history"><h2>ประวัติสัมภาษณ์</h2>${evals.map((e) => `<div class="slot"><b>รอบ ${e.round + 1} · ${e.stage === "DRAFT" ? "แบบร่าง" : e.result === "PASS" ? "ผ่าน" : "ไม่ผ่าน"}</b><p>คะแนน ${e.score || "—"}</p><p>ประเภทเชื้อเพลิง ${esc(e.fuel || "—")}</p><p>${esc(e.note)}</p><small>${esc(person(e.evaluator_id))} · ${date(e.updated_at)}</small></div>`).join("")}</section>` : ""}${attachmentsEnabled ? `<section class="card" data-detail-group="documents"><h2>เอกสารแนบ</h2><p class="muted">รูปภาพแสดงอัตโนมัติ · JPG, PNG และ PDF ไม่เกิน 10 MB/ไฟล์</p>${is('ADMIN','HR')?`<form id="upload">${attachmentFields()}<button type="submit" class="primary">แนบไฟล์เพิ่ม</button><p class="error" data-error></p></form>`:''}<div data-upload-job="${a.id}"></div><div data-drive-panel="${a.id}" aria-live="polite">กำลังโหลดเอกสาร…</div></section>`:''}</div></div>`;
   shell(body);
@@ -861,7 +837,7 @@ async function adminPage() {
       "ตั้งค่าระบบ",
       "สิทธิ์จะตรวจจากฐานข้อมูลทุกครั้ง การเปลี่ยนบทบาทมีผลกับคำสั่งถัดไปทันที",
     ) +
-    `<section class="card"><h2>ผู้ใช้งาน</h2><p class="muted">สร้างบัญชีที่ Supabase → Authentication → Users ก่อน แล้วเพิ่มสิทธิ์ที่นี่ ไม่มีการเก็บรหัสผ่านในตารางระบบ</p>${button("+ เพิ่มสิทธิ์ผู้ใช้", "new-profile", "primary")}<div class="table-wrap"><table><thead><tr><th>ชื่อ / อีเมล</th><th>บทบาท</th><th>หน่วยงาน</th><th>สถานะ</th><th></th></tr></thead><tbody>${profiles.map((p) => `<tr><td>${esc(p.display_name)}<br><small>${esc(p.email)}</small></td><td>${roles[p.role]}</td><td>${esc(p.role === "MANAGER" && p.all_units ? "ทุกหน่วยงาน (สิทธิ์พิเศษ)" : p.units.join(", ") || (p.role === "MANAGER" ? "ยังไม่กำหนดหน่วยงาน" : "ตามบทบาท"))}</td><td>${p.active ? "เปิด" : "ปิด"}</td><td><button data-profile="${p.id}">แก้ไข</button><script type="application/json" id="profile-${p.id}">${JSON.stringify(p).replace(/</g, "\\u003c")}</script></td></tr>`).join("")}</tbody></table></div></section><div class="split"><section class="card"><h2>การรับสมัครออนไลน์</h2><p class="muted">กำหนดสถานะรับสมัคร ผู้สมัครเข้าผ่านแบบฟอร์มของระบบและใช้ PIN จาก HR</p><div class="recruitment-status"><span class="badge ${settings.public_apply ? "" : "neutral"}">${settings.public_apply ? "เปิดรับสมัคร" : "ปิดรับสมัคร"}</span></div><form id="settings"><div class="fields full">${select(
+    `<section class="card"><h2>ผู้ใช้งาน</h2><p class="muted">สร้างบัญชีที่ Supabase → Authentication → Users ก่อน แล้วเพิ่มสิทธิ์ที่นี่ ไม่มีการเก็บรหัสผ่านในตารางระบบ</p>${button("+ เพิ่มสิทธิ์ผู้ใช้", "new-profile", "primary")}<div class="table-wrap"><table><thead><tr><th>ชื่อ / อีเมล</th><th>บทบาท</th><th>หน่วยงาน</th><th>สถานะ</th><th></th></tr></thead><tbody>${profiles.map((p) => `<tr><td>${esc(p.display_name)}<small class="table-secondary">${esc(p.email)}</small></td><td>${roles[p.role]}</td><td>${esc(p.role === "MANAGER" && p.all_units ? "ทุกหน่วยงาน (สิทธิ์พิเศษ)" : p.units.join(", ") || (p.role === "MANAGER" ? "ยังไม่กำหนดหน่วยงาน" : "ตามบทบาท"))}</td><td>${p.active ? "เปิด" : "ปิด"}</td><td><button data-profile="${p.id}">แก้ไข</button><script type="application/json" id="profile-${p.id}">${JSON.stringify(p).replace(/</g, "\\u003c")}</script></td></tr>`).join("")}</tbody></table></div></section><div class="split"><section class="card"><h2>การรับสมัครออนไลน์</h2><p class="muted">กำหนดสถานะรับสมัคร ผู้สมัครเข้าผ่านแบบฟอร์มของระบบและใช้ PIN จาก HR</p><div class="recruitment-status"><span class="badge ${settings.public_apply ? "" : "neutral"}">${settings.public_apply ? "เปิดรับสมัคร" : "ปิดรับสมัคร"}</span></div><form id="settings"><div class="fields full">${select(
       "public_apply",
       "เปิดสมัครออนไลน์",
       opts(
